@@ -11,6 +11,9 @@ Our first task was determining how to calculate K(k|l) (D98, eq. 28) efficiently
 The working approach is to determine the values v_r which correspond to crossing the planes v_x = v_x,min + i * h_x; v_y = v_y,min + i * h_y etc., then putting these into an ordered list. The differences between consecutive values are then an ordered list of K values, which can be assigned to grid points by asking what box an intermediate value of vr would provide.
 
 
+15/6/18: Bugs hunted down - 1) rhat must be a unit vector. 2) Vertices at the edge of the big box can cause trouble, because if the line crosses them then potentially there is a segment of the line (of zero length), assigned to a bin outside the grid.
+
+
 
 
 
