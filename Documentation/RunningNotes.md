@@ -9,3 +9,12 @@ We're looking at using the techniques pioneered by Dehnen in [Local stellar kine
 Our first task was determining how to calculate K(k|l) (D98, eq. 28) efficiently.
 
 The working approach is to determine the values v_r which correspond to crossing the planes v_x = v_x,min + i * h_x; v_y = v_y,min + i * h_y etc., then putting these into an ordered list. The differences between consecutive values are then an ordered list of K values, which can be assigned to grid points by asking what box an intermediate value of vr would provide.
+
+
+
+
+
+(Idea for much, much later which occurs to PJM - we can derive probabilities that stars are part of a velocity substructure, even without the line-of-sight velocities! We have a 'prior' P(v) which we derived from the full distribution, and can use this to say what the probability is for a given stars.
+
+Forget I said this for now - it's for way, way later.
+)
