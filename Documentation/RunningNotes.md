@@ -14,7 +14,7 @@ The working approach is to determine the values v_r which correspond to crossing
 15/6/18: Bugs hunted down - 1) rhat must be a unit vector. 2) Vertices at the edge of the big box can cause trouble, because if the line crosses them then potentially there is a segment of the line (of zero length), assigned to a bin outside the grid.
 
 
-
+19/6/18: We solved a problem with the estimation of the second derivative, where we wanted to avoid using for loops going through each cell in our v-space. This was done by summing all relevant terms for each box l in three separate arrays, one for each dimension.
 
 
 (Idea for much, much later which occurs to PJM - we can derive probabilities that stars are part of a velocity substructure, even without the line-of-sight velocities! We have a 'prior' P(v) which we derived from the full distribution, and can use this to say what the probability is for a given stars.
