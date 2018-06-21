@@ -18,6 +18,8 @@ In the estimation of the second derivative (D98, eq. 30), we opted for an array-
 
 20/6/18: Focused on performance and enhanced the calc_K function by removing the for-loop it contained. Computed L_tilde for 10 000 GDR1 stars in the test. Trying to think of a way to calculate K for all stars simultaneously.
 
+21/6/18: Max_L is now fully implemented and runs. However it only does so for 2 iterations and returns values that does not make a lot of sense. Will implement a velocity model next week to investigate further.
+
 (Idea for much, much later which occurs to PJM - we can derive probabilities that stars are part of a velocity substructure, even without the line-of-sight velocities! We have a 'prior' P(v) which we derived from the full distribution, and can use this to say what the probability is for a given stars.
 
 Forget I said this for now - it's for way, way later.
