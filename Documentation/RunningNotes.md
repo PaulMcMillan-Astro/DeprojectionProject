@@ -20,7 +20,12 @@ In the estimation of the second derivative (D98, eq. 30), we opted for an array-
 
 21/6/18: Max_L is now fully implemented and runs. However it only does so for 2 iterations and returns values that does not make a lot of sense. Will implement a velocity model next week to investigate further.
 
+<<<<<<< HEAD
 25/6/18: Found that only one value of K was passed on to the max_L function which led to some funky stuff. Looks as if the function runs properly now as it does not terminate after 2 iterations anymore.
+=======
+Thoughts 22/6/18: (We should have put minutes/plan of action from the meeting on Wednesday in here too.) An option when we first start working on getting the real data down from the Gaia Archive (and finding ways to choose slices in the HR diagram) is to start by determining the velocity dispersions of these slices and seeing how they vary across the HR diagram (rather than jumping straight to the estimation of Phi for different slices).
+
+>>>>>>> 6671b4c948e7399b6a184bf0e8cf47aa99c24507
 
 (Idea for much, much later which occurs to PJM - we can derive probabilities that stars are part of a velocity substructure, even without the line-of-sight velocities! We have a 'prior' P(v) which we derived from the full distribution, and can use this to say what the probability is for a given stars.
 
