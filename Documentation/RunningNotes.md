@@ -20,6 +20,8 @@ In the estimation of the second derivative (D98, eq. 30), we opted for an array-
 
 21/6/18: Max_L is now fully implemented and runs. However it only does so for 2 iterations and returns values that does not make a lot of sense. Will implement a velocity model next week to investigate further.
 
+25/6/18: Found that only one value of K was passed on to the max_L function which led to some funky stuff. Looks as if the function runs properly now as it does not terminate after 2 iterations anymore.
+
 (Idea for much, much later which occurs to PJM - we can derive probabilities that stars are part of a velocity substructure, even without the line-of-sight velocities! We have a 'prior' P(v) which we derived from the full distribution, and can use this to say what the probability is for a given stars.
 
 Forget I said this for now - it's for way, way later.
