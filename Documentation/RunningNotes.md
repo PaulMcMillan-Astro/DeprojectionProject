@@ -22,7 +22,9 @@ In the estimation of the second derivative (D98, eq. 30), we opted for an array-
 
 25/6/18: Found that only one value of K was passed on to the max_L function which led to some funky stuff. Looks as if the function runs properly now as it does not terminate after 2 iterations anymore. It performed around 290 iterations for a sample of 3500 GDR1 stars on a 8x8x8 grid.
 
-26/6/19: The max_L function runs for around 250 iterations and then returns the warning "Desired error not necessarily achieved due to precision loss". From the scipy.optimize documentation it seems that it cannot converge as the 'gradient and/or function calls were not changing'. It could also emerge from a bug where we get negative values of sum(exp(phi)*K(k|l)) in the first term, which doesn't seem possible. Will investigate this further.
+26/6/18: The max_L function runs for around 250 iterations and then returns the warning "Desired error not necessarily achieved due to precision loss". From the scipy.optimize documentation it seems that it cannot converge as the 'gradient and/or function calls were not changing'. It could also emerge from a bug where we get negative values of sum(exp(phi)*K(k|l)) in the first term, which doesn't seem possible. Will investigate this further.
+
+3/7/18: After fixing an issue where the assumed values for the phi_guess was not correctly computed, the maximization now runs properly and optimizes successfully. It can reproduce simple Gaussian distributions for a low amount of stars, e.g. N=100. Requires further testing however.
 
 Thoughts 22/6/18: (We should have put minutes/plan of action from the meeting on Wednesday in here too.) An option when we first start working on getting the real data down from the Gaia Archive (and finding ways to choose slices in the HR diagram) is to start by determining the velocity dispersions of these slices and seeing how they vary across the HR diagram (rather than jumping straight to the estimation of Phi for different slices).
 
