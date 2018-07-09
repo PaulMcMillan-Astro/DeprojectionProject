@@ -26,6 +26,8 @@ In the estimation of the second derivative (D98, eq. 30), we opted for an array-
 
 3/7/18: After fixing an issue where the assumed values for the phi_guess was not correctly computed, the maximization now runs properly and optimizes successfully. It can reproduce simple Gaussian distributions for a low amount of stars, e.g. N=100. Requires further testing however.
 
+6/7/18: The maximization code runs very slowly due to the fmin_cg function which takes a lot of time to numerically estimate the gradient of L_tilde. We therefore look to write a function that computes said gradient.
+
 Thoughts 22/6/18: (We should have put minutes/plan of action from the meeting on Wednesday in here too.) An option when we first start working on getting the real data down from the Gaia Archive (and finding ways to choose slices in the HR diagram) is to start by determining the velocity dispersions of these slices and seeing how they vary across the HR diagram (rather than jumping straight to the estimation of Phi for different slices).
 
 (Idea for much, much later which occurs to PJM - we can derive probabilities that stars are part of a velocity substructure, even without the line-of-sight velocities! We have a 'prior' P(v) which we derived from the full distribution, and can use this to say what the probability is for a given stars.
