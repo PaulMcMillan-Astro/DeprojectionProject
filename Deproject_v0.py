@@ -213,7 +213,7 @@ def phi_guess(v0,disp0,vmin,dv,n):
     
     return phi_sum
 
-def get_L(phi,*args):
+def get_negL(phi,*args):
     
     """The function that we wish to optimise."""
     
@@ -242,7 +242,7 @@ def get_L(phi,*args):
     
     return negL
 
-def get_grad_L(phi,*args):
+def get_grad_negL(phi,*args):
     
     """In this function we compute the gradient of L. We compute the derivative for each cell and return a 
     1D array of length (nx*ny*nz)."""
@@ -276,7 +276,7 @@ def get_grad_L(phi,*args):
 
 def max_L(v0_guess,disp_guess,alpha, pvals, rhatvals, vmin, dv, n):
     
-    """Function that employs scipy.optimize.fmin_cg to maximise the function get_L().
+    """Function that employs scipy.optimize.fmin_cg to maximise the function get_negL().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
     star sample for which the velocity distribution is to be estimated."""
     
@@ -299,10 +299,8 @@ def max_L(v0_guess,disp_guess,alpha, pvals, rhatvals, vmin, dv, n):
     
     phi0 = np.ravel(phi0) #fmin_cg only takes one-dimensional inputs for the initial guess
     
-    mxl, phi_all = fmin_cg(get_L, phi0, fprime = get_grad_L, args=args, retall=True)
+    mxl, phi_all = fmin_cg(get_negL, phi0, fprime = get_grad_negL, args=args, retall=True)
     
-    mxlnew = - mxl.reshape(n)
+    mxlnew = mxl.reshape(n)
 
     return mxlnew, phi_all
-   
-    #return get_L(phi0, Kvals, N, alpha, dv, n, sigma2)

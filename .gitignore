@@ -1,2 +1,5 @@
 
 *.csv
+__pycache__/Deproject_v0.cpython-36.pyc
+__pycache__/Deproject_plots.cpython-36.pyc
+__pycache__/Deproject_test.cpython-36.pyc

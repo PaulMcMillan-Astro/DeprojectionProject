@@ -1,4 +1,5 @@
 from Deproject_v0 import *
+import matplotlib.pyplot as plt
 plt.style.use('classic')
 
 def plot_fv(phi,plane,vmin,dv,n):
@@ -95,6 +96,6 @@ def L_collector(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
     
     for i in range(len(phi_all)):
         phi = np.ravel(phi_all[i])
-        L_all[i] += get_L(phi, Kvals, N, alpha, dv, n, sigma2)
+        L_all[i] += get_negL(phi, Kvals, N, alpha, dv, n, sigma2)
         
     return -L_all
