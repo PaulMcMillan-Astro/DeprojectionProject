@@ -1,4 +1,6 @@
 """Test that for a given model sample checks if the distribution of L is smooth for a number of guesses of the dispersion."""
+from Deproject_v0 import *
+
 
 def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
     
@@ -143,30 +145,7 @@ def sanity_check(pvals,rhatvals,phi,vmin,dv,n):
     #disp = np.sqrt(np.array([dispx,dispy,dispz]))
     
     return vmean0, sigma, vmean, disp
-
-def L_collector(phi_all,vmin,dv,n,alpha=1e-5):
-    
-    dvx, dvy, dvz = dv
-    nx, ny, nz = n
-    vxmin, vymin, vzmin = vmin
-    N = len(pvals)
-    
-    sigma2 = calc_sigma2(pvals,rhatvals) 
-    
-    Kvals = np.zeros((N,nx,ny,nz))
-    
-    L_all = np.zeros(len(phi_all))
-    
-    for i in range(N):
-        K = calc_K(pvals[i],rhatvals[i],vmin,dv,n)
-        Kvals[i] += K 
-    
-    for i in range(len(phi_all)):
-        phi = np.ravel(phi_all[i])
-        L_all[i] += get_L(phi, Kvals, N, alpha, dv, n, sigma2)
-        
-    return -L_all
-
+	
 def sanity_check(pvals,rhatvals,phi,vmin,dv,n):
     
     """Test function that for a given pseudosample computes the Gaussian distribution and the corresponding distribution

@@ -1,5 +1,4 @@
-import matplotlib as plt
-
+from Deproject_v0 import *
 plt.style.use('classic')
 
 def plot_fv(phi,plane,vmin,dv,n):
@@ -53,16 +52,16 @@ def plot_fv(phi,plane,vmin,dv,n):
     im = ax.imshow(twodfv.T,origin='lower',interpolation='bilinear',vmin=0,vmax=twodfv.max(),cmap = plt.cm.get_cmap('jet'),extent=extent)
     
     cb = plt.colorbar(im,orientation='vertical', extend='max')
-    cb.ax.xaxis.get_ticklabels().set_visible(False)
+    #cb.ax.xaxis.get_ticklabels().set_visible(False)
     cb.set_label('Number density of stars',size='large')
     
     plt.show()
     
     return 
 
-def plot_L(phi_all,vmin,dv,n):
+def plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
     
-    L_vals = L_collector(phi_all,vmin,dv,n)
+    L_vals = L_collector(phi_all,pvals,rhatvals,vmin,dv,n,alpha)
     
     fig, ax = plt.subplots()
     ax.set_title('Maximization of $\mathcal{L}$')
@@ -77,7 +76,7 @@ def plot_L(phi_all,vmin,dv,n):
 
     return
 
-def L_collector(phi_all,vmin,dv,n,alpha=1e-5):
+def L_collector(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
     
     dvx, dvy, dvz = dv
     nx, ny, nz = n

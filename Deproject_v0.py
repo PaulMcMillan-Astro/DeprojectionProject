@@ -212,3 +212,97 @@ def phi_guess(v0,disp0,vmin,dv,n):
     phi_sum = np.sum(phi,axis=0) #We sum the contributions to phi from x,y,z in each box
     
     return phi_sum
+
+def get_L(phi,*args):
+    
+    """The function that we wish to optimise."""
+    
+    Kvals, N, alpha, dv, n, sigma2 = args
+    nx, ny, nz = n
+    dvx, dvy, dvz = dv
+    
+    """We regain the original shape of our phi guess and proceed to compute the various quantities needed from our functions."""
+    
+    phi_unr = np.reshape(phi,n)
+    
+    phixhi = sec_der(phi_unr,sigma2,dv) #last term
+    exphi = np.exp(phi_unr)
+    
+    Kphi = exphi*Kvals
+    Kphiord = Kphi.reshape(len(Kphi),nx*ny*nz) #Order all Kphi values in 1D arrays for each star
+    Kphi_sum = np.sum(Kphiord,axis=1) #We compute the sum of exp(phi)*K(k|l) for each star
+    
+    notzero = Kphi_sum != 0
+    Kphi_sum[notzero] = np.log(Kphi_sum[notzero]) #To make sure we don't get infinities
+    Kphi_sum_tot = np.sum(Kphi_sum) #Gives the double sum in the first term
+        
+    L_tilde = Kphi_sum_tot/N - np.sum(exphi)-((alpha*dvx*dvy*dvz)/2)*np.sum(phixhi**2) #eq. 31 in DB98
+    
+    negL = -1*L_tilde #Since we want to maximize L_tilde, we should minimize -L_tilde 
+    
+    return negL
+
+def get_grad_L(phi,*args):
+    
+    """In this function we compute the gradient of L. We compute the derivative for each cell and return a 
+    1D array of length (nx*ny*nz)."""
+    
+    Kvals, N, alpha, dv, n, sigma2 = args
+    dvx, dvy, dvz = dv
+    nx, ny, nz = n
+    
+    phi_unr = np.reshape(phi,n)
+    exphi = np.exp(phi_unr)
+    
+    Kvalsord = Kvals.reshape(len(Kvals),nx*ny*nz)
+    Kphi = exphi*Kvals
+    Kphiord = Kphi.reshape(len(Kphi),nx*ny*nz) #Order all Kphi values in 1D arrays for each star
+    Kphi_sum = np.sum(Kphiord,axis=1) #We compute the sum of exp(phi)*K(k|l) for each star
+    Kphistack = np.stack([Kphi_sum]*nx*ny*nz,axis=1) #Creates a stack of Kphi_sums that is used to estimate the sum over k
+    
+    #We first create an array of shape (N,nx*ny*nz) and then sum over all of the stars to obtain the first term
+    
+    K_term0 = Kphiord / Kphistack
+    K_term = np.sum(K_term0,axis=0) #The final array with the first term for each cell
+    
+    kappa_sum = -2*sum(sigma2/dv**2)
+    
+    dphixhi = sec_der(phi_unr,sigma2,dv)*kappa_sum #last term
+    dphixhi_rav = np.ravel(dphixhi) #We ravel to obtain a 1D array of length nx*ny*nz
+
+    grad_L = K_term/N-np.exp(phi)-(alpha*dvx*dvy*dvz)*dphixhi_rav
+    
+    return -1*grad_L
+
+def max_L(v0_guess,disp_guess,alpha, pvals, rhatvals, vmin, dv, n):
+    
+    """Function that employs scipy.optimize.fmin_cg to maximise the function get_L().
+    It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
+    star sample for which the velocity distribution is to be estimated."""
+    
+    dvx, dvy, dvz = dv
+    nx, ny, nz = n
+    
+    N = len(pvals)
+    
+    phi0 = phi_guess(v0_guess,disp_guess,vmin,dv,n) #We obtain phi given our initial guess of the velocity distribution
+    
+    sigma2 = calc_sigma2(pvals,rhatvals) 
+    
+    Kvals = np.zeros((N,nx,ny,nz))
+    
+    for i in range(N):
+        K = calc_K(pvals[i],rhatvals[i],vmin,dv,n)
+        Kvals[i] += K   
+        
+    args = (Kvals, N, alpha, dv, n, sigma2)
+    
+    phi0 = np.ravel(phi0) #fmin_cg only takes one-dimensional inputs for the initial guess
+    
+    mxl, phi_all = fmin_cg(get_L, phi0, fprime = get_grad_L, args=args, retall=True)
+    
+    mxlnew = - mxl.reshape(n)
+
+    return mxlnew, phi_all
+   
+    #return get_L(phi0, Kvals, N, alpha, dv, n, sigma2)
