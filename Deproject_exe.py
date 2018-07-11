@@ -16,15 +16,18 @@ def process_input(file_):
 while True:
     data_list = ['data','pseudo']
     try:
-        whatdata = input('Enter data for measurements or pseudo for Gaussian pseudodata: ')
+        argv[1]
+    except (IndexError,NameError):
+        whatdata = input('Enter \"data\" for measurements or \"pseudo\" for Gaussian pseudodata: ')
         if any(whatdata in data_list for i in data_list):
             break
         else:
             raise ValueError('Not a valid input')
     except ValueError:
-        print('Please enter data or pseudo')
+        print('Please enter \"data\" or pseudo')
         continue
     else:
+        whatdata = 'pseudo'
         break
 
 if whatdata == 'data':
@@ -67,6 +70,7 @@ elif whatdata == 'pseudo':
                 dispguess_str = input('Enter guess for sigmax, sigmay, sigmaz: ').split(',')
                 disp_guess = np.array([int(i) for i in dispguess_str])
                 alpha = float(input('Enter value of alpha: '))
+                vmin = np.array([-200,-200,-200])
                 if any(len(i)!=3 for i in [v0,v_disp,v_guess,disp_guess,n]):
                     raise ValueError
             except ValueError:
@@ -150,3 +154,16 @@ if shouldiplot == 'y':
     
     plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n)
     plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha)
+    
+    s=0
+    
+    while True:
+        if s==2:
+            break
+        plotagain = input('Do you want to plot another plane?[y/n] ')
+        if plotagain == 'y':
+            plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n)
+            s+=1
+            continue
+        else:
+            break

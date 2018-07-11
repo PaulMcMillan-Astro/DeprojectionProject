@@ -86,6 +86,7 @@ def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
     im = ax.imshow(L_vals.T,origin='lower',interpolation='bilinear',cmap = plt.cm.get_cmap('jet'),extent=extent)
     
     cb = plt.colorbar(im,orientation='vertical', extend='max')
+    plt.setp(cb.ax.get_yticklabels(), visible=False)
     cb.set_label('Value of $\mathcal{L}$',size='large')
     
     ax.scatter(disp10,disp20,c='black')
