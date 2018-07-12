@@ -156,7 +156,7 @@ def sec_der(phi,sigma2,dv):
     
     kappa = sigma2/dv2
     
-    kappa_sum = -2*sum(sigma2/dv2)
+    kappa_sum = -2*np.sum(sigma2/dv2)
     
     """Here we compute the contributions from all the adjacent bins simultaneously.
     In every dimension we sum the phi values of box l-1 and l+1 and multiply with the relevant factor"""
@@ -265,7 +265,7 @@ def get_grad_negL(phi,*args):
     K_term0 = Kphiord / Kphistack
     K_term = np.sum(K_term0,axis=0) #The final array with the first term for each cell
     
-    kappa_sum = -2*sum(sigma2/dv**2)
+    kappa_sum = -2*np.sum(sigma2/dv**2)
     
     dphixhi = sec_der(phi_unr,sigma2,dv)*kappa_sum #last term
     dphixhi_rav = np.ravel(dphixhi) #We ravel to obtain a 1D array of length nx*ny*nz
