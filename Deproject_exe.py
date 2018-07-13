@@ -1,6 +1,9 @@
 from Deproject_v0 import *
 from sys import argv
 
+import time
+start_time = time.time()
+
 def process_input(file_):
     h_file = []
     input_ = open(file_, 'r')
@@ -134,6 +137,8 @@ rhatvals = np.array([cosb*cosl, cosb*sinl, sinb]).T
 pvals = pvals.to(u.km/u.s).value.T
 
 mxl, phi_all = max_L(v_guess, disp_guess,alpha, pvals, rhatvals, vmin, dv, n)
+
+print("The run took", time.time() - start_time, 's')
 
 sane = input('Do you want to perform a sanity check [y/n]? ')
 

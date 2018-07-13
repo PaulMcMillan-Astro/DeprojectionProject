@@ -82,16 +82,20 @@ def calc_K(pk,rhat,vmin,dv,n):
     
     vr_prime =(vr[:-1] + vr[1:]) / 2
 
-    pk = np.stack([pk]*len(vr_prime)) #The stacking allows us to solve line equations simultaneously
-    rhat = np.stack([rhat]*len(vr_prime))
-    vmin = np.stack([vmin]*len(vr_prime))
-    vr_primestack = np.stack([vr_prime]*3,axis=1)
+    pks = np.zeros((len(vr_prime),len(pk)))
+    pks[:] = pk
+    rhats = np.zeros((len(vr_prime),len(rhat)))
+    rhats[:] = rhat
+    vmins = np.zeros((len(vr_prime),len(vmin)))
+    vmins[:] = vmin
+    vr_primestack = np.ones((len(vr_prime),3))
+    vr_primestack *= vr_prime[:,None] 
 
     """We now solve the line equation again for values in the middle of each bin with a line segment in it.
     This gives us the coordinates for each relevant bin, given in line_bins.
     Finally we compute the length of each segment and add said value to the relevant box in our K-space."""
-    v_prime = pk + vr_primestack*rhat
-    line_bins = np.floor((v_prime-vmin)/ dv)
+    v_prime = pks + vr_primestack*rhats
+    line_bins = np.floor((v_prime-vmins)/ dv)
       
     line_bins = line_bins.astype(int)
     
@@ -115,7 +119,11 @@ def calc_sigma2(pvals,rhat,give_vmean=False):
 
     iden = np.identity(3)
     
-    A = np.stack([iden]*len(rhat_outer))-rhat_outer #Eq. 4 in DB98. Yields an array of dim (N_star,3,3)
+    A0 = np.zeros((len(rhat_outer),3,3))
+    
+    A0[:] = iden 
+    
+    A = A0-rhat_outer
     
     A_mean = np.mean(A,axis=0)
     A_mean_inv = np.linalg.inv(A_mean)
@@ -258,7 +266,9 @@ def get_grad_negL(phi,*args):
     Kphi = exphi*Kvals
     Kphiord = Kphi.reshape(len(Kphi),nx*ny*nz) #Order all Kphi values in 1D arrays for each star
     Kphi_sum = np.sum(Kphiord,axis=1) #We compute the sum of exp(phi)*K(k|l) for each star
-    Kphistack = np.stack([Kphi_sum]*nx*ny*nz,axis=1) #Creates a stack of Kphi_sums that is used to estimate the sum over k
+    Kphistack = np.zeros((N,nx*ny*nz))
+    
+    Kphistack[:] = Kphi_sum[:,None]
     
     #We first create an array of shape (N,nx*ny*nz) and then sum over all of the stars to obtain the first term
     
@@ -299,7 +309,7 @@ def max_L(v0_guess,disp_guess,alpha, pvals, rhatvals, vmin, dv, n):
     
     phi0 = np.ravel(phi0) #fmin_cg only takes one-dimensional inputs for the initial guess
     
-    mxl, phi_all = fmin_cg(get_negL, phi0, fprime = get_grad_negL, args=args, retall=True)
+    mxl, phi_all = fmin_cg(get_negL, phi0, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True)
     
     mxlnew = mxl.reshape(n)
 
