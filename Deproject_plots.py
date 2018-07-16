@@ -234,7 +234,71 @@ def plot_grad_L(phi, plane, alpha, pvals, rhatvals, vmin, dv, n):
     
     cb = plt.colorbar(im,orientation='vertical', extend='max')
     #plt.setp(cb.ax.get_yticklabels(), visible=False)
-    cb.set_label(r'Value of $\nabla \mathcal{L}$',size='large')
+    cb.set_label(r'Value of $\nabla\mathcal{L}$',size='large')
+    
+    plt.show()
+    
+    return 
+	
+def plot_sec_der(phi, plane, pvals, rhatvals, vmin, dv, n):
+    
+    from scipy.optimize import approx_fprime
+    
+    dvx, dvy, dvz = dv
+    nx, ny, nz = n
+    vxmin, vymin, vzmin = vmin
+    vxmax, vymax, vzmax = vxmin+nx*dvx,vymin+ny*dvy,vzmin+nz*dvz
+    
+    N = len(pvals)
+    
+    sigma2 = calc_sigma2(pvals,rhatvals) 
+    
+    secd = sec_der(phi,sigma2,dv)
+    
+    if plane == 'xy':
+        axsum = 2
+        n1, n2 = nx, ny
+        dx, dy = dvx, dvy
+        x0, y0 = vxmin, vymin
+        x1, y1 = vxmax, vymax
+        xlab, ylab = '$v_x$', '$v_y$'
+    elif plane == 'yz':
+        axsum = 0
+        n1, n2 = ny, nz
+        dx, dy = dvy, dvz
+        x0, y0 = vymin, vzmin
+        x1, y1 = vymax, vzmax
+        xlab, ylab = '$v_y$', '$v_z$'
+    elif plane == 'xz':
+        axsum = 1
+        n1, n2 = nx, nz
+        dx, dy = dvx, dvz
+        x0, y0 = vxmin, vzmin
+        x1, y1 = vxmax, vzmax
+        xlab, ylab = '$v_x$', '$v_z$'
+    
+    secdproj = np.sum(secd,axis=axsum)
+    
+    xbins = np.arange(x0,x1+dx,dx)
+    ybins = np.arange(y0,x1+dy,dy)
+    
+    xc = (xbins[1:]+xbins[:-1])/2
+    yc = (ybins[1:]+ybins[:-1])/2
+    
+    fig, ax = plt.subplots(figsize=(8,6))
+    
+    ax.set_title(r'Contour plot of $\nabla \mathcal{L}$')
+    ax.set_xlim(x0,x1)
+    ax.set_ylim(y0,y1)
+    ax.set_xlabel(xlab+' [km s$^{-1}$]',size='large')
+    ax.set_ylabel(ylab+' [km s$^{-1}$]',size='large')
+    
+    extent = [xc[0], xc[-1], yc[0], yc[-1]]
+    im = ax.imshow(secdproj.T,origin='lower',interpolation='bilinear',vmin=secdproj.min(),vmax=secdproj.max(),cmap = plt.cm.get_cmap('jet'),extent=extent)
+    
+    cb = plt.colorbar(im,orientation='vertical', extend='max')
+    #plt.setp(cb.ax.get_yticklabels(), visible=False)
+    cb.set_label(r'Value of $\nabla\mathcal{L}$',size='large')
     
     plt.show()
     

@@ -215,7 +215,7 @@ def phi_guess(v0,disp0,vmin,dv,n):
     gyp = gy.logpdf(vyc)
     gzp = gz.logpdf(vzc)    
     
-    phi = np.meshgrid(gxp,gyp,gzp) #The meshgrid function couples each phi value for our 3D scenario to the relevant box 
+    phi = np.meshgrid(gxp,gyp,gzp,indexing='ij') #The meshgrid function couples each phi value for our 3D scenario to the relevant box 
     
     phi_sum = np.sum(phi,axis=0) #We sum the contributions to phi from x,y,z in each box
     
@@ -284,7 +284,7 @@ def get_grad_negL(phi,*args):
     
     return -1*grad_L
 
-def max_L(v0_guess,disp_guess,alpha, pvals, rhatvals, vmin, dv, n):
+def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=None,disp_guess=None, disp=1):
     
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_negL().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
@@ -295,9 +295,16 @@ def max_L(v0_guess,disp_guess,alpha, pvals, rhatvals, vmin, dv, n):
     
     N = len(pvals)
     
-    phi0 = phi_guess(v0_guess,disp_guess,vmin,dv,n) #We obtain phi given our initial guess of the velocity distribution
+    sigma2, vmean = calc_sigma2(pvals,rhatvals,give_vmean=True) 
     
-    sigma2 = calc_sigma2(pvals,rhatvals) 
+    sigma = np.sqrt(sigma2)
+    
+    if v0_guess == None:
+        v0_guess = vmean
+    if disp_guess == None:
+        disp_guess = sigma
+    
+    phi0 = phi_guess(v0_guess,disp_guess,vmin,dv,n) #We obtain phi given our initial guess of the velocity distribution
     
     Kvals = np.zeros((N,nx,ny,nz))
     
@@ -309,7 +316,7 @@ def max_L(v0_guess,disp_guess,alpha, pvals, rhatvals, vmin, dv, n):
     
     phi0 = np.ravel(phi0) #fmin_cg only takes one-dimensional inputs for the initial guess
     
-    mxl, phi_all = fmin_cg(get_negL, phi0, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True)
+    mxl, phi_all = fmin_cg(get_negL, phi0, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True,disp=disp)
     
     mxlnew = mxl.reshape(n)
 

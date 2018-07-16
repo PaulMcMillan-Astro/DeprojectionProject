@@ -124,14 +124,23 @@ def sanity_check(pvals,rhatvals,phi,vmin,dv,n):
     
     """Here we make sure to multipy the probability distribution f(v) with the centre values of the velocity bins in
     each dimension. """
-    
-    vxmean = np.sum(vxc[None,:,None]*fv)/np.sum(fv)
-    vymean = np.sum(vyc[:,None,None]*fv)/np.sum(fv) 
+#    vxmean = np.sum(vxc[None,:,None]*fv)/np.sum(fv)
+#    vymean = np.sum(vyc[:,None,None]*fv)/np.sum(fv) 
+#    vzmean = np.sum(vzc[None,None,:]*fv)/np.sum(fv)
+#    vmean = np.array([vxmean,vymean,vzmean])
+#    
+#    dispx = np.sum((vxc[None,:,None]**2*fv))/np.sum(fv)-vxmean**2
+#    dispy = np.sum((vyc[:,None,None]**2*fv))/np.sum(fv)-vymean**2
+#    dispz = np.sum((vzc[None,None,:]**2*fv))/np.sum(fv)-vzmean**2
+#    disp = np.sqrt(np.array([dispx,dispy,dispz]))
+	
+    vxmean = np.sum(vxc[:,None,None]*fv)/np.sum(fv)
+    vymean = np.sum(vyc[None,:,None]*fv)/np.sum(fv) 
     vzmean = np.sum(vzc[None,None,:]*fv)/np.sum(fv)
     vmean = np.array([vxmean,vymean,vzmean])
     
-    dispx = np.sum((vxc[None,:,None]**2*fv))/np.sum(fv)-vxmean**2
-    dispy = np.sum((vyc[:,None,None]**2*fv))/np.sum(fv)-vymean**2
+    dispx = np.sum((vxc[:,None,None]**2*fv))/np.sum(fv)-vxmean**2
+    dispy = np.sum((vyc[None,:,None]**2*fv))/np.sum(fv)-vymean**2
     dispz = np.sum((vzc[None,None,:]**2*fv))/np.sum(fv)-vzmean**2
     disp = np.sqrt(np.array([dispx,dispy,dispz]))
     
@@ -144,7 +153,7 @@ def sanity_check(pvals,rhatvals,phi,vmin,dv,n):
     
     return 
 
-def grad_negL_test(phi0,pvals,alpha,vmin,dv,n):
+def grad_negL_test(phi0,pvals,rhatvals,alpha,vmin,dv,n):
     
     from scipy.optimize import check_grad
     from scipy.optimize import approx_fprime
@@ -166,19 +175,16 @@ def grad_negL_test(phi0,pvals,alpha,vmin,dv,n):
         Kvals[i] += K   
 
     phi0r = np.ravel(phi0)
-    
-    gest_L = np.zeros(len(phi0r))
 
     args = Kvals, N, alpha, dv, n, sigma2
 
-    #gest_L = approx_fprime(phi0r,get_negL,1e-5,Kvals,N,alpha,dv,n,sigma2)
-    gest_L = np.zeros(len(phi0r))
+    gest_negL = np.zeros(len(phi0r))
     
     d0 = np.zeros(len(phi0r))
     
-    L0 = -get_negL(phi0r, Kvals, N, alpha, dv, n, sigma2)
+    L0 = get_negL(phi0r, Kvals, N, alpha, dv, n, sigma2)
     
-    eps = 1e-6
+    eps = 1e-5
    
     for i in range(len(phi0r)):
         d0[i] = 1
@@ -187,18 +193,17 @@ def grad_negL_test(phi0,pvals,alpha,vmin,dv,n):
 
         L1 = get_negL(phi0r+d, Kvals, N, alpha, dv, n, sigma2)
         
-        gest_L[i] += (L1-L0)/d[i]
+        gest_negL[i] += (L1-L0)/d[i]
         
         d0[i] = 0
         
-        if i == len(phi0r)/2:
-            print('Halfway there')
+    #gest_negL = approx_fprime(phi0r,get_negL,1e-5,Kvals,N,alpha,dv,n,sigma2)
     
     grad_negL = get_grad_negL(phi0r, Kvals, N, alpha, dv, n, sigma2)
     
-    frac = gest_L/grad_L
+    frac = gest_negL/grad_negL
 
-    twonorm = check_grad(get_negL,get_grad_L,phi0r,Kvals, N, alpha, dv, n, sigma2)
+    twonorm = check_grad(get_negL,get_grad_negL,phi0r,Kvals, N, alpha, dv, n, sigma2)
     
     fig, ax = plt.subplots()
     ax.set_ylabel('$\mathrm{Counts}$')
@@ -206,4 +211,4 @@ def grad_negL_test(phi0,pvals,alpha,vmin,dv,n):
     ax.hist(frac,bins=100,range=(0,1.05))
     plt.show()
     
-    return frac, gest_L, grad_negL, twonorm
+    return frac, twonorm
