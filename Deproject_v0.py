@@ -280,11 +280,11 @@ def get_grad_negL(phi,*args):
     dphixhi = sec_der(phi_unr,sigma2,dv)*kappa_sum #last term
     dphixhi_rav = np.ravel(dphixhi) #We ravel to obtain a 1D array of length nx*ny*nz
 
-    grad_L = K_term/N-np.exp(phi)-(alpha*dvx*dvy*dvz)*dphixhi_rav
+    grad_L = (K_term/N-np.exp(phi)-(alpha*dvx*dvy*dvz)*dphixhi_rav)
     
     return -1*grad_L
 
-def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=None,disp_guess=None, disp=1):
+def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1):
     
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_negL().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
@@ -299,9 +299,9 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=None,disp_guess=None, dis
     
     sigma = np.sqrt(sigma2)
     
-    if v0_guess == None:
+    if v0_guess == []:
         v0_guess = vmean
-    if disp_guess == None:
+    if disp_guess == []:
         disp_guess = sigma
     
     phi0 = phi_guess(v0_guess,disp_guess,vmin,dv,n) #We obtain phi given our initial guess of the velocity distribution
@@ -314,10 +314,106 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=None,disp_guess=None, dis
         
     args = (Kvals, N, alpha, dv, n, sigma2)
     
-    phi0 = np.ravel(phi0) #fmin_cg only takes one-dimensional inputs for the initial guess
+    phi0r = np.ravel(phi0) #fmin_cg only takes one-dimensional inputs for the initial guess
     
-    mxl, phi_all = fmin_cg(get_negL, phi0, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True,disp=disp)
+    mxl, phi_all = fmin_cg(get_negL, phi0r, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True,disp=disp)
     
     mxlnew = mxl.reshape(n)
 
     return mxlnew, phi_all
+
+def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
+    
+    diff = 1
+    s = 0
+
+    logalpha0 = np.log10(alpha0)
+    logalphavals = np.linspace(logalpha0-5,logalpha0+5,10) #logarithm
+
+    vxmin, vymin, vzmin = vmin
+    dvx, dvy, dvz = dv
+    nx, ny, nz = n
+
+    vxmax, vymax, vzmax = vxmin+nx*dvx,vymin+ny*dvy,vzmin+nz*dvz
+
+    vx_bins = np.arange(vxmin, vxmax+dvx, dvx)
+    vy_bins = np.arange(vymin, vymax+dvy, dvy)
+    vz_bins = np.arange(vzmin, vzmax+dvz, dvz)
+
+    vxc = (vx_bins[1:]+vx_bins[:-1])/2
+    vyc = (vy_bins[1:]+vy_bins[:-1])/2
+    vzc = (vz_bins[1:]+vz_bins[:-1])/2
+
+    vxx, vyy, vzz = np.meshgrid(vxc,vyc,vzc,indexing='ij')
+
+    ind = np.indices((nx,ny,nz))
+
+    rind = np.ravel_multi_index(ind,(nx,ny,nz))
+
+    rrind = np.ravel(rind)
+
+    while diff>=tol:
+
+        phi0, phiall = max_L(alpha0, pvals, rhatvals, vmin, dv, n, disp=0)
+
+        fv0 = np.exp(phi0)
+        fv0s = np.sum(fv0)
+        prob = np.ravel(fv0/fv0s)
+
+        smp = np.random.choice(rrind,(M,N),p=prob)
+
+        smpx, smpy, smpz = np.asarray(np.unravel_index(smp,(nx,ny,nz)))
+
+        vxvals = vxx[smpx,smpy,smpz].T
+        vyvals = vyy[smpx,smpy,smpz].T
+        vzvals = vzz[smpx,smpy,smpz].T
+
+        smpvals = np.asarray([vxvals, vyvals, vzvals]).T
+
+        ise = np.zeros((M,len(logalphavals)))
+
+        for i in range(M):
+
+            for j in range(len(logalphavals)):
+
+                alpha = 10**(logalphavals[j])
+
+                phi, phiall = max_L(alpha, smpvals[i], rhatvals, vmin, dv, n, disp=0)
+
+                fv = np.exp(phi)
+
+                ise[i][j] = np.sum((fv-fv0)**2)
+
+        mise = np.mean(ise,axis=0)
+
+        minmise = np.amin(mise)
+
+        optind = np.argwhere(mise==minmise)[0][0]
+
+        logalpha_opt = logalphavals[optind]
+
+        diff = abs(logalpha0 - logalpha_opt)
+
+        logalpha0 = logalpha_opt
+
+        if optind == 0:
+            lower = logalpha0-2
+            upper = logalphavals[optind+1]
+        elif optind == (len(logalphavals)-1):
+            lower = logalphavals[optind-1]
+            upper = logalpha0+2
+        else:
+            lower = logalphavals[optind-1]
+            upper = logalphavals[optind+1]
+
+        logalphavals = np.linspace(lower,upper,10)
+
+        s+=1
+
+    alpha_fin = 10**(logalpha0)    
+
+    print("The run took", time.time() - start_time, 's')
+    print('It took',s,'iterations')
+    print('The optimal value for alpha is',alpha_fin)
+    
+    return
