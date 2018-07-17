@@ -1,0 +1,25 @@
+#All runs are for pseudodata with mu = (0,0,0) and sigma = (50,50,50) over a range of v_range = [-200,200] km/s. The tolerance for fmin_cg is 5e-4.
+
+#The function timed is the max_L function
+
+N			n			alpha			L_val			iter		t			
+
+1000		20x20x20	1e-13			11.46			56			48 s # N.B Redo
+
+2000		20x20x20	1e-13			11.60			68			99 s # N.B Redo
+
+2000		25x25x25	7e-14			11.57			65			173 s
+
+2000		40x40x40	7e-15			11.18			51			729 s
+
+3000		40x40x40	7e-15			11.29			56			1529 s
+
+1000		50x50x50	7e-15			10.75			59			667 s
+
+2000		50x50x50	7e-15			11.07			43			1132 s
+
+3000		50x50x50	7e-15			11.21			63			2761 s
+
+4000		50x50x50	7e-15			11.29			51			3072 s
+
+1000		64x64x64	7e-15			10.51			55			1621 s

@@ -1,0 +1,7 @@
+#These runs are made for a set of pseudodata with mu = (0,0,0) and sigma = (50,50,50) on Deproject_v0
+
+N			M			n			alpha			iter			t				alpha0
+
+1000		10			10x10x10	-1.65e-13			4			2314 s			1e-10
+
+1000		10			10x10x10	-7.95e-13			4			2182 s			1e-12

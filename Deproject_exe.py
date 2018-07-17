@@ -136,7 +136,7 @@ pvals = s*np.array([-sinl*cosb*mul - cosl*sinb*mub,
 rhatvals = np.array([cosb*cosl, cosb*sinl, sinb]).T
 pvals = pvals.to(u.km/u.s).value.T
 
-mxl, phi_all = max_L(alpha, pvals, rhatvals, vmin, dv, n,v_guess=v_guess, disp_guess=disp_guess)
+mxl, phi_all = max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=v_guess, disp_guess=disp_guess)
 
 print("The run took", time.time() - start_time, 's')
 
