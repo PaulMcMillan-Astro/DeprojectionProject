@@ -32,6 +32,8 @@ def model_sample(N,v0,disp0):
     
     psvx, psvy, psvz = psvels.T
     
+    #We use Astropy's coord class which makes it easy to keep track of units and conversions
+    
     psample = coord.Galactic(u=psx,v=psy,w=psz,U=psvx*(u.km/u.s),
                              V=psvy*(u.km/u.s),W=psvz*(u.km/u.s),representation_type=coord.CartesianRepresentation,differential_type=coord.CartesianDifferential)
     
@@ -40,7 +42,8 @@ def model_sample(N,v0,disp0):
     return psample
 
 def calc_K(pk,rhat,vmin,dv,n):
-    '''Calculate the values of K simultaneously for all bins for a given star with p, rhat'''
+    '''Calculate the values of K simultaneously for all bins for a given star with tangential velocity
+    vector pk and a unit vector rhat'''
     
     vxmin, vymin, vzmin = vmin
     dvx, dvy, dvz = dv
@@ -111,7 +114,11 @@ def calc_K(pk,rhat,vmin,dv,n):
 def calc_sigma2(pvals,rhat,give_vmean=False):
     
     """Function that applies equation 12 of DB98 for a set of stars from their tangential velocities and unit vectors.
-    Returns the velocity dispersion tensor."""
+    Returns the velocity dispersion tensor.
+    
+    pvals: array of the pk vectors for all N stars in our sample. Should have dims (N,3)
+    rhat: array of N unit vectors, one for each star
+    give_vmean: if True, returns the computed mean velocity vector value for the given sample"""
     
     pmean = np.mean(pvals, axis=0)
     
@@ -129,13 +136,13 @@ def calc_sigma2(pvals,rhat,give_vmean=False):
     A_mean_inv = np.linalg.inv(A_mean)
     v_mean = np.dot(A_mean_inv, pmean)
     
-    pp = pvals - np.dot(A,v_mean)
+    pp = pvals - np.dot(A,v_mean) #Computes p' from equation (6) in DB98
     
     pp2mean = np.mean(np.square(pp),axis=0)
     
     B = np.array([[9,-1,-1],[-1,9,-1],[-1,-1,9]])
     
-    sigma2 = (3/14)*np.dot(B,pp2mean)
+    sigma2 = (3/14)*np.dot(B,pp2mean) #The velocity dispersion tensor
     
     if give_vmean == True:
     
@@ -149,6 +156,14 @@ def sec_der(phi,sigma2,dv):
     
     """Estimates the second deriative for ln(f(v_l)) given a sample of stars (eq. 30 of D98).
     Takes contributions at the phi values of adjacent bins for each bin l.
+    
+    phi: An array of dimensions (nx,ny,nz) that gives the logarithm of the probability f(v) for a given
+        velocity to be in the different cells of v-space
+        
+    sigma2: The velocity dispersion tensor, should be a vector
+    
+    dv: The dimensions of each cell in km/s
+    
     
     We create a new, larger box with dimensions n+2 centred on our phi-space box.
     This allows us to disregard any issues at the bins at the boundaries of our phi-space."""
@@ -187,7 +202,15 @@ def sec_der(phi,sigma2,dv):
 def phi_guess(v0,disp0,vmin,dv,n):
     
     """Provides an initial guess of the phi values in each bin given an assumed distribution f(v). 
-    For now only allows for a Gaussian type guess given arrays with mean velocities and dispersions for each dimension."""
+    For now only allows for a Gaussian type guess given arrays with mean velocities and dispersions for each dimension.
+    
+    v0: A vector containing all the mean velocity values for the Gaussian distribution
+    
+    disp0: A vector with the velocity dispersions for each Gaussian in x, y, z
+    
+    vmin: The anchor point of our velocity space box
+    
+    """
     
     vxmin, vymin, vzmin = vmin
     dvx, dvy, dvz = dv
@@ -215,7 +238,8 @@ def phi_guess(v0,disp0,vmin,dv,n):
     gyp = gy.logpdf(vyc)
     gzp = gz.logpdf(vzc)    
     
-    phi = np.meshgrid(gxp,gyp,gzp,indexing='ij') #The meshgrid function couples each phi value for our 3D scenario to the relevant box 
+    phi = np.meshgrid(gxp,gyp,gzp,indexing='ij') 
+    #The meshgrid function couples each phi value for our 3D scenario to the relevant box 
     
     phi_sum = np.sum(phi,axis=0) #We sum the contributions to phi from x,y,z in each box
     
@@ -223,13 +247,23 @@ def phi_guess(v0,disp0,vmin,dv,n):
 
 def get_negL(phi,*args):
     
-    """The function that we wish to optimise."""
+    """The function that we wish to optimise. Corresponds to eq. 31 in D98.
+    
+    N: Number of stars in our sample
+    
+    Kvals: Array of dimensions (N,nx,ny,nz) containing the K-values for each star in our sample.
+    
+    alpha: Smoothing parameter that can be found using the function opt_alpha
+    
+    
+    """
     
     Kvals, N, alpha, dv, n, sigma2 = args
     nx, ny, nz = n
     dvx, dvy, dvz = dv
     
-    """We regain the original shape of our phi guess and proceed to compute the various quantities needed from our functions."""
+    """We regain the original shape of our phi guess and proceed to compute the 
+    various quantities needed from our functions."""
     
     phi_unr = np.reshape(phi,n)
     
@@ -237,7 +271,12 @@ def get_negL(phi,*args):
     phixhi_sum = np.sum(phixhi**2)
     exphir = np.exp(phi)
     
-    exphi_coo = scisp.coo_matrix(exphir)
+    """We use sparse matrices in our computation of L_tilde because our K- arrays have low 
+    density. Therefore we use the scipy.sparse package to convert our arrays to sparse arrays.
+    Using coo-matrices is faster when building the matrix, but the csc-matrices are faster for
+    arithmetic operations"""
+    
+    exphi_coo = scisp.coo_matrix(exphir) 
     exphi_csc = exphi_coo.tocsc()
     
     Kphi = Kvals.multiply(exphi_csc) #Order all Kphi values in 1D arrays for each star
@@ -255,7 +294,11 @@ def get_negL(phi,*args):
 def get_grad_negL(phi,*args):
     
     """In this function we compute the gradient of L. We compute the derivative for each cell and return a 
-    1D array of length (nx*ny*nz)."""
+    1D array of length (nx*ny*nz).
+    
+    args: see get_L
+    
+    """
     
     Kvals, N, alpha, dv, n, sigma2 = args
     dvx, dvy, dvz = dv
@@ -310,7 +353,7 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
     
     Kvals = np.zeros((N,nx*ny*nz))
 
-    for i in range(N):
+    for i in range(N): #Loop that yield a sparse array of N K-values
 
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
 
@@ -331,11 +374,32 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
 
 def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
     
+    """Function that finds the optimal value of alpha for a given sample of stars.
+    Given an initial guess of alpha, alpha0, it will draw M samples of size N from the resulting
+    distribution f(v) computed using max_L. For each sample we perform the maximisation scheme
+    to find the f(v) distribution for a set of alpha values. The mean integrated square error (MISE) is then
+    computed for each alpha value and the alpha with the lowest MISE, alpha_opt is then our new initial guess.
+    
+    This process repeats until the difference |alpha0-alpha_opt| falls below a certain threshold.
+    
+    alpha0: The initial guess of alpha
+    M: The number of samples to compute the MISE for
+    N: Number of stars in each sample
+    pvals: Array with the tangential velocity vectors for all the  original stars in our sample
+    rhatvals: Array with the unit vector for each sample star
+    vmin: Vector indicating the anchor of v-space
+    dv: The dims of each cell
+    n: The dims of our box
+    tol: The desired logarithmic tolerance for the minimisation scheme. Default value is 0.01.
+    
+    """
+    
+    
     diff = 1
     s = 0
 
     logalpha0 = np.log10(alpha0)
-    logalphavals = np.linspace(logalpha0-5,logalpha0+5,10) #logarithm
+    logalphavals = np.linspace(logalpha0-5,logalpha0+5,10) #The initial set of alpha values
 
     vxmin, vymin, vzmin = vmin
     dvx, dvy, dvz = dv
@@ -351,11 +415,11 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
     vyc = (vy_bins[1:]+vy_bins[:-1])/2
     vzc = (vz_bins[1:]+vz_bins[:-1])/2
 
-    vxx, vyy, vzz = np.meshgrid(vxc,vyc,vzc,indexing='ij')
+    vxx, vyy, vzz = np.meshgrid(vxc,vyc,vzc,indexing='ij') #The centre values of each cell in our v-space box
 
     ind = np.indices((nx,ny,nz))
 
-    rind = np.ravel_multi_index(ind,(nx,ny,nz))
+    rind = np.ravel_multi_index(ind,(nx,ny,nz)) #An array containing the 3D coordinates of our box
 
     rrind = np.ravel(rind)
 
@@ -363,11 +427,11 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
 
         phi0, phiall = max_L(alpha0, pvals, rhatvals, vmin, dv, n, disp=0)
 
-        fv0 = np.exp(phi0)
+        fv0 = np.exp(phi0) #The pdf f(v) given our inital guess alpha0
         fv0s = np.sum(fv0)
-        prob = np.ravel(fv0/fv0s)
+        prob = np.ravel(fv0/fv0s) #The normalised probability
 
-        smp = np.random.choice(rrind,(M,N),p=prob)
+        smp = np.random.choice(rrind,(M,N),p=prob) #Creation of M samples of size n given f(v)
 
         smpx, smpy, smpz = np.asarray(np.unravel_index(smp,(nx,ny,nz)))
 
@@ -377,7 +441,7 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
 
         smpvals = np.asarray([vxvals, vyvals, vzvals]).T
 
-        ise = np.zeros((M,len(logalphavals)))
+        ise = np.zeros((M,len(logalphavals))) #container for the integrated square errors
 
         for i in range(M):
 
@@ -395,13 +459,18 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
 
         minmise = np.amin(mise)
 
-        optind = np.argwhere(mise==minmise)[0][0]
+        optind = np.argwhere(mise==minmise)[0][0] #The index of the optimimal alpha
 
         logalpha_opt = logalphavals[optind]
 
         diff = abs(logalpha0 - logalpha_opt)
 
-        logalpha0 = logalpha_opt
+        logalpha0 = logalpha_opt #We set the optimised alpha value to be our new initial guess
+        
+        """Since our initial guess is very broad and covers 10 orders of magnitude, we have to narrow it down.
+        This is done by taking the alpha values to the right and left of our optimal value to define the new range.
+        If the optimal value is at the edges of our array, then we take the missing upper or lower bound
+        to be 2 magnitudes larger than alpha_opt"""
 
         if optind == 0:
             lower = logalpha0-2
@@ -419,7 +488,6 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
 
     alpha_fin = 10**(logalpha0)    
 
-    print("The run took", time.time() - start_time, 's')
     print('It took',s,'iterations')
     print('The optimal value for alpha is',alpha_fin)
     
