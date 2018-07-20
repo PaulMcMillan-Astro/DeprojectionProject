@@ -6,12 +6,40 @@ import astropy.coordinates as coord
 import scipy.stats as st
 from astropy.table import Table
 from astropy.io import ascii
-from scipy import sparse
-from scipy.optimize import minimize
+from scipy import sparse as scisp
 from scipy.optimize import fmin_cg
-import sparse as sp
 
-def calc_K1(pk,rhat,vmin,dv,n):
+def model_sample(N,v0,disp0): 
+
+    """Generates a simple model solar neighbourhood star sample in a Galactic frame of reference assuming a 
+    Gaussian velocity distribution. The stars have distances from the Sun that are in the range [10,100] pc.
+    
+    Takes the following arugments:
+    
+    N: Number of stars in the sample
+    v0: 3d array specifying the mean velocities of the Gaussian distributions in x, y, z
+    disp: 3d array specifying the velocity dispersions of the distributions in x, y, z"""
+    
+    xmax, ymax, zmax = np.array([100,100,100]) / np.sqrt(3)
+    xmin, ymin, zmin = -xmax,-ymax,-zmax
+    
+    psx = (np.random.rand(N)*(xmax-xmin)+xmin)*u.pc
+    psy = (np.random.rand(N)*(ymax-ymin)+ymin)*u.pc
+    psz = (np.random.rand(N)*(zmax-zmin)+zmin)*u.pc
+    
+    scale = np.random.randn(N,3)
+    psvels = v0 + scale*disp0
+    
+    psvx, psvy, psvz = psvels.T
+    
+    psample = coord.Galactic(u=psx,v=psy,w=psz,U=psvx*(u.km/u.s),
+                             V=psvy*(u.km/u.s),W=psvz*(u.km/u.s),representation_type=coord.CartesianRepresentation,differential_type=coord.CartesianDifferential)
+    
+    psample.set_representation_cls(coord.SphericalRepresentation)
+    
+    return psample
+
+def calc_K(pk,rhat,vmin,dv,n):
     '''Calculate the values of K simultaneously for all bins for a given star with p, rhat'''
     
     vxmin, vymin, vzmin = vmin
@@ -45,6 +73,8 @@ def calc_K1(pk,rhat,vmin,dv,n):
     vr = np.concatenate((vrx,vry,vrz))
     vr.sort() #We obtain an ordered list with all vr values for intersections between entry and exit points
     
+    K = np.zeros((nx,ny,nz))
+    
     if len(vr)==0:
         return K
     
@@ -74,11 +104,48 @@ def calc_K1(pk,rhat,vmin,dv,n):
     
     Kvals = line_len/(dvx*dvy*dvz)
 
-    K = sp.COO(line_bins.T,Kvals,shape=(nx,ny,nz))
-    
+    K[line_bins[:,0],line_bins[:,1],line_bins[:,2]] = line_len/(dvx*dvy*dvz)
+
     return K
 
-def sec_der1(phi,sigma2,dv):
+def calc_sigma2(pvals,rhat,give_vmean=False):
+    
+    """Function that applies equation 12 of DB98 for a set of stars from their tangential velocities and unit vectors.
+    Returns the velocity dispersion tensor."""
+    
+    pmean = np.mean(pvals, axis=0)
+    
+    rhat_outer = rhat[:,:,None]*rhat[:,None,:] #Fast way of getting the outer product for each rhat with itself.
+
+    iden = np.identity(3)
+    
+    A0 = np.zeros((len(rhat_outer),3,3))
+    
+    A0[:] = iden 
+    
+    A = A0-rhat_outer
+    
+    A_mean = np.mean(A,axis=0)
+    A_mean_inv = np.linalg.inv(A_mean)
+    v_mean = np.dot(A_mean_inv, pmean)
+    
+    pp = pvals - np.dot(A,v_mean)
+    
+    pp2mean = np.mean(np.square(pp),axis=0)
+    
+    B = np.array([[9,-1,-1],[-1,9,-1],[-1,-1,9]])
+    
+    sigma2 = (3/14)*np.dot(B,pp2mean)
+    
+    if give_vmean == True:
+    
+        return sigma2, v_mean
+    
+    else:
+    
+        return sigma2
+
+def sec_der(phi,sigma2,dv):
     
     """Estimates the second deriative for ln(f(v_l)) given a sample of stars (eq. 30 of D98).
     Takes contributions at the phi values of adjacent bins for each bin l.
@@ -94,12 +161,8 @@ def sec_der1(phi,sigma2,dv):
     nxx, nyy, nzz = nx+2, ny+2, nz+2 
 
     phip = np.zeros((nxx,nyy,nzz)) #new larger box
-    
-#     phip = sp.COO([],shape=(nxx,nyy,nzz))
 
     phip[1:-1,1:-1,1:-1] = phi #puts the phi-box in the centre of our larger box
-    
-    kappa = sigma2/dv2
     
     kappa_sum = -2*(sigma2x/dvx**2+sigma2y/dvy**2+sigma2z/dvx**2)
     
@@ -118,12 +181,47 @@ def sec_der1(phi,sigma2,dv):
     Yields a box with the same dimensions as phi, containing the second derivative values for each bin."""
     
     phi_arr = phi_arrx+phi_arry+phi_arrz+kappa_sum*phi 
+
+    return phi_arr
+
+def phi_guess(v0,disp0,vmin,dv,n):
     
-    phi_arrs = sp.COO.from_numpy(phi_arr)
+    """Provides an initial guess of the phi values in each bin given an assumed distribution f(v). 
+    For now only allows for a Gaussian type guess given arrays with mean velocities and dispersions for each dimension."""
+    
+    vxmin, vymin, vzmin = vmin
+    dvx, dvy, dvz = dv
+    nx, ny, nz = n
+    v0x, v0y, v0z = v0
+    dispx, dispy, dispz = disp0
+    
+    vxmax, vymax, vzmax = vxmin+nx*dvx,vymin+ny*dvy,vzmin+nz*dvz
+    
+    vx_bins = np.arange(vxmin, vxmax+dvx, dvx)
+    vy_bins = np.arange(vymin, vymax+dvy, dvy)
+    vz_bins = np.arange(vzmin, vzmax+dvz, dvz)
+    
+    vxc = (vx_bins[1:]+vx_bins[:-1])/2
+    vyc = (vy_bins[1:]+vy_bins[:-1])/2
+    vzc = (vz_bins[1:]+vz_bins[:-1])/2
+    
+    """Given the velocities of each bin we compute the 3D Gaussian value."""
+    
+    gx = st.norm(v0x,dispx) #Gets the normal distribution for dim x given the mean velocities v0x and dispersion dispx
+    gy = st.norm(v0y,dispy)
+    gz = st.norm(v0z,dispz)
+    
+    gxp = gx.logpdf(vxc) #Computes the log of the probability of our bin values being in the Gaussian
+    gyp = gy.logpdf(vyc)
+    gzp = gz.logpdf(vzc)    
+    
+    phi = np.meshgrid(gxp,gyp,gzp,indexing='ij') #The meshgrid function couples each phi value for our 3D scenario to the relevant box 
+    
+    phi_sum = np.sum(phi,axis=0) #We sum the contributions to phi from x,y,z in each box
+    
+    return phi_sum
 
-    return phi_arrs
-
-def get_negL1(phi,*args):
+def get_negL(phi,*args):
     
     """The function that we wish to optimise."""
     
@@ -135,22 +233,20 @@ def get_negL1(phi,*args):
     
     phi_unr = np.reshape(phi,n)
     
-    phixhi = sec_der1(phi_unr,sigma2,dv) #last term
-    phixhi_sum = sp.COO.sum(phixhi**2)
-    exphi = np.exp(phi_unr)
+    phixhi = sec_der(phi_unr,sigma2,dv) #last term
+    phixhi_sum = np.sum(phixhi**2)
+    exphir = np.exp(phi)
     
-    exphi_sp = sp.COO.from_numpy(exphi)
+    exphi_coo = scisp.coo_matrix(exphir)
+    exphi_csc = exphi_coo.tocsc()
     
-    Kphi = exphi_sp*Kvals
-    Kphiord = Kphi.reshape((Kphi.shape[0],nx*ny*nz)) #Order all Kphi values in 1D arrays for each star
-    Kphi_sum_sp = sp.COO.sum(Kphiord,axis=1) #We compute the sum of exp(phi)*K(k|l) for each star
-    Kphi_sum = sp.COO.todense(Kphi_sum_sp)
+    Kphi = Kvals.multiply(exphi_csc) #Order all Kphi values in 1D arrays for each star
+    Kphi_sum = Kphi.sum(axis=1) #We compute the sum of exp(phi)*K(k|l) for each star
     
-    notzero = Kphi_sum != 0
-    Kphi_sum[notzero] = np.log(Kphi_sum[notzero]) #To make sure we don't get infinities
-    Kphi_sum_tot = np.sum(Kphi_sum) #Gives the double sum in the first term
+    Kphi_sumlog = np.log(Kphi_sum.data) #To make sure we don't get infinities
+    Kphi_sum_tot = np.sum(Kphi_sumlog) #Gives the double sum in the first term
     
-    L_tilde = Kphi_sum_tot/N - np.sum(exphi)-((alpha*dvx*dvy*dvz)/2)*phixhi_sum #eq. 31 in DB98
+    L_tilde = Kphi_sum_tot/N - exphi_csc.sum() -((alpha*dvx*dvy*dvz)/2)*phixhi_sum #eq. 31 in DB98
     
     negL = -1*L_tilde #Since we want to maximize L_tilde, we should minimize -L_tilde 
     
@@ -168,26 +264,25 @@ def get_grad_negL(phi,*args):
     
     phi_unr = np.reshape(phi,n)
     exphir = np.exp(phi)
-    exphi = exphir.reshape(phi_unr.shape)
     
-    Kphi = exphi*Kvals
-    Kphiord = Kphi.reshape(len(Kphi),nx*ny*nz) #Order all Kphi values in 1D arrays for each star
-    Kphi_sum = np.sum(Kphiord,axis=1) #We compute the sum of exp(phi)*K(k|l) for each star
-    Kphistack = np.zeros((N,nx*ny*nz))
+    exphi_coo = scisp.coo_matrix(exphir)
+    exphi_csc = exphi_coo.tocsc()
     
-    Kphistack[:] = Kphi_sum[:,None]
+    Kphi = exphi_csc.multiply(Kvals)
     
-    #We first create an array of shape (N,nx*ny*nz) and then sum over all of the stars to obtain the first term
-    
-    K_term0 = Kphiord / Kphistack
-    K_term = np.sum(K_term0,axis=0) #The final array with the first term for each cell
-    
-    kappa_sum = -2*(sigma2x/dvx**2+sigma2y/dvy**2+sigma2z/dvx**2)
-    
-    dphixhi = sec_der(phi_unr,sigma2,dv)*kappa_sum #last term
-    dphixhi_rav = np.ravel(dphixhi) #We ravel to obtain a 1D array of length nx*ny*nz
+    Kphi_sum = 1/Kphi.sum(axis=1) #We compute the sum of exp(phi)*K(k|l) for each star
 
-    grad_L = (K_term/N-exphir-(alpha*dvx*dvy*dvz)*dphixhi_rav)
+    K_term0 = Kphi.multiply(Kphi_sum)
+    K_term = K_term0.sum(axis=0) #The final array with the first term for each cell
+
+    kappa_sum = -2*(sigma2x/dvx**2+sigma2y/dvy**2+sigma2z/dvx**2)
+
+    dphixhi = sec_der(phi_unr,sigma2,dv)*kappa_sum #last term
+    dphixhi_rav = dphixhi.reshape((phi.shape[0],1)) #We ravel to obtain a 1D array of length nx*ny*nz
+    dphixhi_coo = scisp.coo_matrix(dphixhi_rav)
+    dphixhi_csc = dphixhi_coo.tocsc().T
+
+    grad_L = np.asarray(K_term/N-exphi_csc-(alpha*dvx*dvy*dvz)*dphixhi_csc).reshape(nx*ny*nz,)
     
     return -1*grad_L
 
@@ -213,17 +308,18 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
     
     phi0 = phi_guess(v0_guess,disp_guess,vmin,dv,n) #We obtain phi given our initial guess of the velocity distribution
     
-    Klist = []
-    
+    Kvals = np.zeros((N,nx*ny*nz))
+
     for i in range(N):
+
+        K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
+
+        Kvals[i] = K
+
+    Kvals_coo = scisp.coo_matrix(Kvals)
+    Kvals_csc = Kvals_coo.tocsc()
         
-        K = calc_K(pvals[i],rhatvals[i],vmin,dv,n)
-        
-        Klist.append(K)
-        
-    Kvals = sp.stack(Klist,axis=0)
-        
-    args = (Kvals, N, alpha, dv, n, sigma2)
+    args = (Kvals_csc, N, alpha, dv, n, sigma2)
     
     phi0r = np.ravel(phi0) #fmin_cg only takes one-dimensional inputs for the initial guess
     
@@ -232,3 +328,99 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
     mxlnew = mxl.reshape(n)
 
     return mxlnew, phi_all
+
+def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
+    
+    diff = 1
+    s = 0
+
+    logalpha0 = np.log10(alpha0)
+    logalphavals = np.linspace(logalpha0-5,logalpha0+5,10) #logarithm
+
+    vxmin, vymin, vzmin = vmin
+    dvx, dvy, dvz = dv
+    nx, ny, nz = n
+
+    vxmax, vymax, vzmax = vxmin+nx*dvx,vymin+ny*dvy,vzmin+nz*dvz
+
+    vx_bins = np.arange(vxmin, vxmax+dvx, dvx)
+    vy_bins = np.arange(vymin, vymax+dvy, dvy)
+    vz_bins = np.arange(vzmin, vzmax+dvz, dvz)
+
+    vxc = (vx_bins[1:]+vx_bins[:-1])/2
+    vyc = (vy_bins[1:]+vy_bins[:-1])/2
+    vzc = (vz_bins[1:]+vz_bins[:-1])/2
+
+    vxx, vyy, vzz = np.meshgrid(vxc,vyc,vzc,indexing='ij')
+
+    ind = np.indices((nx,ny,nz))
+
+    rind = np.ravel_multi_index(ind,(nx,ny,nz))
+
+    rrind = np.ravel(rind)
+
+    while diff>=tol:
+
+        phi0, phiall = max_L(alpha0, pvals, rhatvals, vmin, dv, n, disp=0)
+
+        fv0 = np.exp(phi0)
+        fv0s = np.sum(fv0)
+        prob = np.ravel(fv0/fv0s)
+
+        smp = np.random.choice(rrind,(M,N),p=prob)
+
+        smpx, smpy, smpz = np.asarray(np.unravel_index(smp,(nx,ny,nz)))
+
+        vxvals = vxx[smpx,smpy,smpz].T
+        vyvals = vyy[smpx,smpy,smpz].T
+        vzvals = vzz[smpx,smpy,smpz].T
+
+        smpvals = np.asarray([vxvals, vyvals, vzvals]).T
+
+        ise = np.zeros((M,len(logalphavals)))
+
+        for i in range(M):
+
+            for j in range(len(logalphavals)):
+
+                alpha = 10**(logalphavals[j])
+
+                phi, phiall = max_L(alpha, smpvals[i], rhatvals, vmin, dv, n, disp=0)
+
+                fv = np.exp(phi)
+
+                ise[i][j] = np.sum((fv-fv0)**2)
+
+        mise = np.mean(ise,axis=0)
+
+        minmise = np.amin(mise)
+
+        optind = np.argwhere(mise==minmise)[0][0]
+
+        logalpha_opt = logalphavals[optind]
+
+        diff = abs(logalpha0 - logalpha_opt)
+
+        logalpha0 = logalpha_opt
+
+        if optind == 0:
+            lower = logalpha0-2
+            upper = logalphavals[optind+1]
+        elif optind == (len(logalphavals)-1):
+            lower = logalphavals[optind-1]
+            upper = logalpha0+2
+        else:
+            lower = logalphavals[optind-1]
+            upper = logalphavals[optind+1]
+
+        logalphavals = np.linspace(lower,upper,10)
+
+        s+=1
+
+    alpha_fin = 10**(logalpha0)    
+
+    print("The run took", time.time() - start_time, 's')
+    print('It took',s,'iterations')
+    print('The optimal value for alpha is',alpha_fin)
+    
+    return
