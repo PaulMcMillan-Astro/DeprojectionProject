@@ -311,9 +311,11 @@ def get_grad_negL(phi,*args):
     
     Kphi = exphi_csc.multiply(Kvals)
     
-    Kphi_sum = 1/Kphi.sum(axis=1) #We compute the sum of exp(phi)*K(k|l) for each star
+    Kphi_sum = Kphi_suminv = Kphi.sum(axis=1)
+    
+    Kphi_suminv[Kphi_sum.nonzero()] = 1/Kphi_sum[Kphi_sum.nonzero()] #We compute the sum of exp(phi)*K(k|l) for each star
 
-    K_term0 = Kphi.multiply(Kphi_sum)
+    K_term0 = Kphi.multiply(Kphi_suminv)
     K_term = K_term0.sum(axis=0) #The final array with the first term for each cell
 
     kappa_sum = -2*(sigma2x/dvx**2+sigma2y/dvy**2+sigma2z/dvx**2)
