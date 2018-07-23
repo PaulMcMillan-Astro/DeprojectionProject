@@ -1,5 +1,5 @@
 """Test that for a given model sample checks if the distribution of L is smooth for a number of guesses of the dispersion."""
-from Deproject_v0 import *
+from Deproject_v1 import *
 import numpy as np
 
 def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
@@ -11,11 +11,16 @@ def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
     
     sigma2 = calc_sigma2(pvals,rhatvals) 
     
-    Kvals = np.zeros((N,nx,ny,nz))
-    
-    for i in range(N):
-        K = calc_K(pvals[i],rhatvals[i],vmin,dv,n)
-        Kvals[i] += K 
+    Kvals = np.zeros((N,nx*ny*nz))
+
+    for i in range(N): #Loop that yield a sparse array of N K-values
+
+        K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
+
+        Kvals[i] = K
+
+    Kvals_coo = scisp.coo_matrix(Kvals)
+    Kvals_csc = Kvals_coo.tocsc()
     
     """We generate a set of sigma values for each dimension that will serve as basis for different gueses of phi"""
     
@@ -68,7 +73,7 @@ def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
 
             phi0r = np.ravel(phi0)
 
-            L_vals[i][j] += -get_negL(phi0r, Kvals, N, alpha, dv, n, sigma2)
+            L_vals[i][j] += -get_negL(phi0r, Kvals_csc, N, alpha, dv, n, sigma2)
             
     fig, ax = plt.subplots(figsize=(8,6))
     
@@ -168,21 +173,26 @@ def grad_negL_test(phi0,pvals,rhatvals,alpha,vmin,dv,n):
 
     sigma2 = calc_sigma2(pvals,rhatvals) 
 
-    Kvals = np.zeros((N,nx,ny,nz))
+    Kvals = np.zeros((N,nx*ny*nz))
 
-    for i in range(N):
-        K = calc_K(pvals[i],rhatvals[i],vmin,dv,n)
-        Kvals[i] += K   
+    for i in range(N): #Loop that yield a sparse array of N K-values
+
+        K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
+
+        Kvals[i] = K
+
+    Kvals_coo = scisp.coo_matrix(Kvals)
+    Kvals_csc = Kvals_coo.tocsc()
 
     phi0r = np.ravel(phi0)
 
-    args = Kvals, N, alpha, dv, n, sigma2
+    args = Kvals_csc, N, alpha, dv, n, sigma2
 
     gest_negL = np.zeros(len(phi0r))
     
     d0 = np.zeros(len(phi0r))
     
-    L0 = get_negL(phi0r, Kvals, N, alpha, dv, n, sigma2)
+    L0 = get_negL(phi0r, Kvals_csc, N, alpha, dv, n, sigma2)
     
     eps = 1e-5
    
@@ -191,7 +201,7 @@ def grad_negL_test(phi0,pvals,rhatvals,alpha,vmin,dv,n):
         
         d = d0*eps
 
-        L1 = get_negL(phi0r+d, Kvals, N, alpha, dv, n, sigma2)
+        L1 = get_negL(phi0r+d, Kvals_csc, N, alpha, dv, n, sigma2)
         
         gest_negL[i] += (L1-L0)/d[i]
         
@@ -199,11 +209,11 @@ def grad_negL_test(phi0,pvals,rhatvals,alpha,vmin,dv,n):
         
     #gest_negL = approx_fprime(phi0r,get_negL,1e-5,Kvals,N,alpha,dv,n,sigma2)
     
-    grad_negL = get_grad_negL(phi0r, Kvals, N, alpha, dv, n, sigma2)
+    grad_negL = get_grad_negL(phi0r, Kvals_csc, N, alpha, dv, n, sigma2)
     
     frac = gest_negL/grad_negL
 
-    twonorm = check_grad(get_negL,get_grad_negL,phi0r,Kvals, N, alpha, dv, n, sigma2)
+    twonorm = check_grad(get_negL,get_grad_negL,phi0r,Kvals_csc, N, alpha, dv, n, sigma2)
     
     fig, ax = plt.subplots()
     ax.set_ylabel('$\mathrm{Counts}$')

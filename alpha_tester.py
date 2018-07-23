@@ -44,7 +44,7 @@ while True:
         n = np.array(vars_[3][0].split(',')[:],dtype=int)
         vmin = np.array(vars_[4][0].split(',')[:],dtype=float)
         dv = np.array(vars_[5][0].split(',')[:],dtype=float)
-        alpha = float(vars_[6][0])
+        alpha = float(vars_[8][0])
         break
 
 sample = model_sample(N,v0,v_disp)

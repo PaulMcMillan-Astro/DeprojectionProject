@@ -1,4 +1,4 @@
-from Deproject_v0 import *
+from Deproject_v1 import *
 import matplotlib.pyplot as plt
 plt.style.use('classic')
 
@@ -86,17 +86,22 @@ def L_collector(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
     
     sigma2 = calc_sigma2(pvals,rhatvals) 
     
-    Kvals = np.zeros((N,nx,ny,nz))
-    
     L_all = np.zeros(len(phi_all))
     
-    for i in range(N):
-        K = calc_K(pvals[i],rhatvals[i],vmin,dv,n)
-        Kvals[i] += K 
+    Kvals = np.zeros((N,nx*ny*nz))
+
+    for i in range(N): #Loop that yield a sparse array of N K-values
+
+        K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
+
+        Kvals[i] = K
+
+    Kvals_coo = scisp.coo_matrix(Kvals)
+    Kvals_csc = Kvals_coo.tocsc()
     
     for i in range(len(phi_all)):
         phi = np.ravel(phi_all[i])
-        L_all[i] += get_negL(phi, Kvals, N, alpha, dv, n, sigma2)
+        L_all[i] += get_negL(phi, Kvals_csc, N, alpha, dv, n, sigma2)
         
     return -L_all
 
@@ -177,11 +182,16 @@ def plot_grad_L(phi, plane, alpha, pvals, rhatvals, vmin, dv, n):
     
     sigma2 = calc_sigma2(pvals,rhatvals) 
     
-    Kvals = np.zeros((N,nx,ny,nz))
-    
-    for i in range(N):
-        K = calc_K(pvals[i],rhatvals[i],vmin,dv,n)
-        Kvals[i] += K  
+    Kvals = np.zeros((N,nx*ny*nz))
+
+    for i in range(N): #Loop that yield a sparse array of N K-values
+
+        K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
+
+        Kvals[i] = K
+
+    Kvals_coo = scisp.coo_matrix(Kvals)
+    Kvals_csc = Kvals_coo.tocsc()
     
     if plane == 'xy':
         axsum = 2
@@ -207,7 +217,7 @@ def plot_grad_L(phi, plane, alpha, pvals, rhatvals, vmin, dv, n):
         
     phir = np.ravel(phi)
         
-    gL_vals = -get_grad_negL(phir, Kvals, N, alpha, dv, n, sigma2)
+    gL_vals = -get_grad_negL(phir, Kvals_csc, N, alpha, dv, n, sigma2)
     
     #gL_vals = approx_fprime(phir,get_negL,1e-5,Kvals,N,alpha,dv,n,sigma2)
     

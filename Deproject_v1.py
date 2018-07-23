@@ -372,7 +372,7 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
 
     return mxlnew, phi_all
 
-def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
+def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.005):
     
     """Function that finds the optimal value of alpha for a given sample of stars.
     Given an initial guess of alpha, alpha0, it will draw M samples of size N from the resulting
