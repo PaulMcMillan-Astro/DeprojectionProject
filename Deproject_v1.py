@@ -254,8 +254,6 @@ def get_negL(phi,*args):
     Kvals: Array of dimensions (N,nx,ny,nz) containing the K-values for each star in our sample.
     
     alpha: Smoothing parameter that can be found using the function opt_alpha
-    
-    
     """
     
     Kvals, N, alpha, dv, n, sigma2 = args
@@ -372,7 +370,7 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
 
     return mxlnew, phi_all
 
-def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.005):
+def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
     
     """Function that finds the optimal value of alpha for a given sample of stars.
     Given an initial guess of alpha, alpha0, it will draw M samples of size N from the resulting
