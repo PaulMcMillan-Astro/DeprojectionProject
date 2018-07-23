@@ -280,7 +280,7 @@ def get_negL(phi,*args):
     Kphi = Kvals.multiply(exphi_csc) #Order all Kphi values in 1D arrays for each star
     Kphi_sum = Kphi.sum(axis=1) #We compute the sum of exp(phi)*K(k|l) for each star
     
-    Kphi_sumlog = np.log(Kphi_sum.data) #To make sure we don't get infinities
+    Kphi_sumlog = np.log(Kphi_sum[Kphi_sum != 0]) #To make sure we don't get infinities
     Kphi_sum_tot = np.sum(Kphi_sumlog) #Gives the double sum in the first term
     
     L_tilde = Kphi_sum_tot/N - exphi_csc.sum() -((alpha*dvx*dvy*dvz)/2)*phixhi_sum #eq. 31 in DB98
