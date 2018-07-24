@@ -97,7 +97,7 @@ def L_collector(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
         K_coo = scisp.coo_matrix(K)
 
-        Kvals = scisp.vstack((Kvals,K))
+        Kvals = scisp.vstack((Kvals,K_coo))
 
     Kvals_csc = Kvals.tocsc()
     
@@ -193,7 +193,7 @@ def plot_grad_L(phi, plane, alpha, pvals, rhatvals, vmin, dv, n):
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
         K_coo = scisp.coo_matrix(K)
 
-        Kvals = scisp.vstack((Kvals,K))
+        Kvals = scisp.vstack((Kvals,K_coo))
 
     Kvals_csc = Kvals.tocsc()
     

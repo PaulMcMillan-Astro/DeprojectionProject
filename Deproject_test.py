@@ -22,7 +22,7 @@ def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
         K_coo = scisp.coo_matrix(K)
 
-        Kvals = scisp.vstack((Kvals,K))
+        Kvals = scisp.vstack((Kvals,K_coo))
 
     Kvals_csc = Kvals.tocsc()
     
@@ -186,7 +186,7 @@ def grad_negL_test(phi0,pvals,rhatvals,alpha,vmin,dv,n):
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
         K_coo = scisp.coo_matrix(K)
 
-        Kvals = scisp.vstack((Kvals,K))
+        Kvals = scisp.vstack((Kvals,K_coo))
 
     Kvals_csc = Kvals.tocsc()
 

@@ -360,7 +360,7 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
         K_coo = scisp.coo_matrix(K)
 
-        Kvals = scisp.vstack((Kvals,K))
+        Kvals = scisp.vstack((Kvals,K_coo))
 
     Kvals_csc = Kvals.tocsc()
         
