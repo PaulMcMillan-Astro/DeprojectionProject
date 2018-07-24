@@ -88,16 +88,18 @@ def L_collector(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
     
     L_all = np.zeros(len(phi_all))
     
-    Kvals = np.zeros((N,nx*ny*nz))
+    K0 = np.ravel(calc_K(pvals[0],rhatvals[0],vmin,dv,n))
+    
+    Kvals = scisp.coo_matrix(K0)
 
-    for i in range(N): #Loop that yield a sparse array of N K-values
+    for i in range(1,N): #Loop that yield a sparse array of N K-values
 
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
+        K_coo = scisp.coo_matrix(K)
 
-        Kvals[i] = K
+        Kvals = scisp.vstack((Kvals,K))
 
-    Kvals_coo = scisp.coo_matrix(Kvals)
-    Kvals_csc = Kvals_coo.tocsc()
+    Kvals_csc = Kvals.tocsc()
     
     for i in range(len(phi_all)):
         phi = np.ravel(phi_all[i])
@@ -182,16 +184,18 @@ def plot_grad_L(phi, plane, alpha, pvals, rhatvals, vmin, dv, n):
     
     sigma2 = calc_sigma2(pvals,rhatvals) 
     
-    Kvals = np.zeros((N,nx*ny*nz))
+    K0 = np.ravel(calc_K(pvals[0],rhatvals[0],vmin,dv,n))
+    
+    Kvals = scisp.coo_matrix(K0)
 
-    for i in range(N): #Loop that yield a sparse array of N K-values
+    for i in range(1,N): #Loop that yield a sparse array of N K-values
 
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
+        K_coo = scisp.coo_matrix(K)
 
-        Kvals[i] = K
+        Kvals = scisp.vstack((Kvals,K))
 
-    Kvals_coo = scisp.coo_matrix(Kvals)
-    Kvals_csc = Kvals_coo.tocsc()
+    Kvals_csc = Kvals.tocsc()
     
     if plane == 'xy':
         axsum = 2

@@ -13,16 +13,18 @@ def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
     
     sigmax,sigmay,sigmaz = np.sqrt(sigma2)
     
-    Kvals = np.zeros((N,nx*ny*nz))
+    K0 = np.ravel(calc_K(pvals[0],rhatvals[0],vmin,dv,n))
+    
+    Kvals = scisp.coo_matrix(K0)
 
-    for i in range(N): #Loop that yield a sparse array of N K-values
+    for i in range(1,N): #Loop that yield a sparse array of N K-values
 
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
+        K_coo = scisp.coo_matrix(K)
 
-        Kvals[i] = K
+        Kvals = scisp.vstack((Kvals,K))
 
-    Kvals_coo = scisp.coo_matrix(Kvals)
-    Kvals_csc = Kvals_coo.tocsc()
+    Kvals_csc = Kvals.tocsc()
     
     """We generate a set of sigma values for each dimension that will serve as basis for different gueses of phi"""
     
@@ -175,16 +177,18 @@ def grad_negL_test(phi0,pvals,rhatvals,alpha,vmin,dv,n):
 
     sigma2 = calc_sigma2(pvals,rhatvals) 
 
-    Kvals = np.zeros((N,nx*ny*nz))
+    K0 = np.ravel(calc_K(pvals[0],rhatvals[0],vmin,dv,n))
+    
+    Kvals = scisp.coo_matrix(K0)
 
-    for i in range(N): #Loop that yield a sparse array of N K-values
+    for i in range(1,N): #Loop that yield a sparse array of N K-values
 
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
+        K_coo = scisp.coo_matrix(K)
 
-        Kvals[i] = K
+        Kvals = scisp.vstack((Kvals,K))
 
-    Kvals_coo = scisp.coo_matrix(Kvals)
-    Kvals_csc = Kvals_coo.tocsc()
+    Kvals_csc = Kvals.tocsc()
 
     phi0r = np.ravel(phi0)
 
