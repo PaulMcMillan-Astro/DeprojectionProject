@@ -350,17 +350,19 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
         disp_guess = sigma
     
     phi0 = phi_guess(v0_guess,disp_guess,vmin,dv,n) #We obtain phi given our initial guess of the velocity distribution
-    
-    Kvals = np.zeros((N,nx*ny*nz))
 
-    for i in range(N): #Loop that yield a sparse array of N K-values
+    K0 = np.ravel(calc_K(pvals[0],rhatvals[0],vmin,dv,n))
+    
+    Kvals = scisp.coo_matrix(K0)
+
+    for i in range(1,N): #Loop that yield a sparse array of N K-values
 
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
+        K_coo = scisp.coo_matrix(K)
 
-        Kvals[i] = K
+        Kvals = scisp.vstack((Kvals,K))
 
-    Kvals_coo = scisp.coo_matrix(Kvals)
-    Kvals_csc = Kvals_coo.tocsc()
+    Kvals_csc = Kvals.tocsc()
         
     args = (Kvals_csc, N, alpha, dv, n, sigma2)
     

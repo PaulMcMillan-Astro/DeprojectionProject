@@ -1,4 +1,5 @@
 from Deproject_test import * 
+from Deproject_v1 import calc_sigma2
 from sys import argv 
 
 def process_input(file_):

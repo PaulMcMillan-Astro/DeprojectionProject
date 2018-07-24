@@ -11,6 +11,8 @@ def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
     
     sigma2 = calc_sigma2(pvals,rhatvals) 
     
+    sigmax,sigmay,sigmaz = np.sqrt(sigma2)
+    
     Kvals = np.zeros((N,nx*ny*nz))
 
     for i in range(N): #Loop that yield a sparse array of N K-values
@@ -32,7 +34,7 @@ def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
     
     if plane == 'xy':
         trueind = np.where(disp0z == dispz_guess)
-        disp10, disp20 = disp0x, disp0y
+        disp10, disp20 = sigmax, sigmay
         disp1, disp2 = dispx_guess, dispy_guess
         disp3 = dispz_guess[trueind]
         n1, n2 = nx, ny
@@ -42,7 +44,7 @@ def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
         xlab, ylab = '$\sigma_x$', '$\sigma_y$'
     elif plane == 'yz':
         trueind = np.where(disp0x == dispz_guess)
-        disp10, disp20 = disp0y, disp0z
+        disp10, disp20 = sigmay, sigmaz
         disp1, disp2 = dispy_guess, dispz_guess
         disp3 = dispx_guess[trueind]
         n1, n2 = ny, nz
@@ -52,7 +54,7 @@ def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
         xlab, ylab = '$\sigma_y$', '$\sigma_z$'
     elif plane == 'xz':
         trueind = np.where(disp0y == dispz_guess)
-        disp10, disp20 = disp0x, disp0z
+        disp10, disp20 = sigmax, sigmaz
         disp1, disp2 = dispx_guess, dispz_guess
         disp3 = dispy_guess[trueind]
         n1, n2 = nx, nz
