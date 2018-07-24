@@ -301,7 +301,7 @@ def plot_sec_der(phi, plane, pvals, rhatvals, vmin, dv, n):
     
     fig, ax = plt.subplots(figsize=(8,6))
     
-    ax.set_title(r'Contour plot of $\nabla \mathcal{L}$')
+    ax.set_title(r'Contour plot of $\nabla^2 \log f(v)$')
     ax.set_xlim(x0,x1)
     ax.set_ylim(y0,y1)
     ax.set_xlabel(xlab+' [km s$^{-1}$]',size='large')
@@ -312,7 +312,7 @@ def plot_sec_der(phi, plane, pvals, rhatvals, vmin, dv, n):
     
     cb = plt.colorbar(im,orientation='vertical', extend='max')
     #plt.setp(cb.ax.get_yticklabels(), visible=False)
-    cb.set_label(r'Value of $\nabla\mathcal{L}$',size='large')
+    cb.set_label(r'Value of $\nabla^2 \log f(v)$',size='large')
     
     plt.show()
     

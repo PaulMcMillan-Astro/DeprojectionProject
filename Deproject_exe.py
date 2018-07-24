@@ -158,7 +158,7 @@ if shouldiplot == 'y':
     from Deproject_plots import *
     
     plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n)
-    plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha)
+#    plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha)
     
     s=0
     
