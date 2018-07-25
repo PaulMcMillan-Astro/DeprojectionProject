@@ -49,7 +49,7 @@ def plot_fv(phi,plane,vmin,dv,n):
     ax.set_xlabel(xlab+' [km s$^{-1}$]',size='large')
     ax.set_ylabel(ylab+' [km s$^{-1}$]',size='large')
     
-    extent = [xc[0], xc[-1], yc[0], yc[-1]]
+    extent = [xbins[0], xbins[-1], ybins[0], ybins[-1]]
     im = ax.imshow(twodfv.T,origin='lower',interpolation='bilinear',vmin=0,vmax=twodfv.max(),cmap = plt.cm.get_cmap('jet'),extent=extent)
     
     cb = plt.colorbar(im,orientation='vertical', extend='max')
@@ -162,7 +162,7 @@ def plot_K(plane, pvals, rhatvals, vmin, dv, n):
     ax.set_xlabel(xlab+' [km s$^{-1}$]',size='large')
     ax.set_ylabel(ylab+' [km s$^{-1}$]',size='large')
     
-    extent = [xc[0], xc[-1], yc[0], yc[-1]]
+    extent = [xbins[0], xbins[-1], ybins[0], ybins[-1]]
     im = ax.imshow(K_proj.T,origin='lower',interpolation='bilinear',vmin=0,vmax=K_proj.max(),cmap = plt.cm.get_cmap('jet'),extent=extent)
     
     cb = plt.colorbar(im,orientation='vertical', extend='max')
@@ -307,7 +307,7 @@ def plot_sec_der(phi, plane, pvals, rhatvals, vmin, dv, n):
     ax.set_xlabel(xlab+' [km s$^{-1}$]',size='large')
     ax.set_ylabel(ylab+' [km s$^{-1}$]',size='large')
     
-    extent = [xc[0], xc[-1], yc[0], yc[-1]]
+    extent = [xbins[0], xbins[-1], ybins[0], ybins[-1]]
     im = ax.imshow(secdproj.T,origin='lower',interpolation='bilinear',vmin=secdproj.min(),vmax=secdproj.max(),cmap = plt.cm.get_cmap('jet'),extent=extent)
     
     cb = plt.colorbar(im,orientation='vertical', extend='max')

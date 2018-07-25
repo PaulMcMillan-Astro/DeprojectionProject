@@ -374,6 +374,8 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
     
     mxl, phi_all = fmin_cg(get_negL, phi0r, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True,disp=disp)
     
+#    mxl, phi_all = fmin_cg(get_negL, phi0r, gtol=5e-4, args=args, retall=True,disp=disp)
+    
     mxlnew = mxl.reshape(n)
 
     return mxlnew, phi_all
