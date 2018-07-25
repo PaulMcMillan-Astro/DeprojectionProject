@@ -108,7 +108,7 @@ def calc_K(pk,rhat,vmin,dv,n):
     Kvals = line_len/(dvx*dvy*dvz)
 
     K[line_bins[:,0],line_bins[:,1],line_bins[:,2]] = line_len/(dvx*dvy*dvz)
-
+    
     return K
 
 def calc_sigma2(pvals,rhat,give_vmean=False):
@@ -195,8 +195,11 @@ def sec_der(phi,sigma2,dv):
     """We sum all contributions from adjacent boxes and finally add the terms for each box l. 
     Yields a box with the same dimensions as phi, containing the second derivative values for each bin."""
     
-    phi_arr = phi_arrx+phi_arry+phi_arrz+kappa_sum*phi 
-
+    phi_arr = phi_arrx+phi_arry+phi_arrz+kappa_sum*phi
+    
+    phi_arr[0,:,:] = phi_arr[:,0,:] = phi_arr[:,:,0] = 0 #Due to lack of smoothness at edges, we set these values to 0
+    phi_arr[-1,:,:] = phi_arr[:,-1,:] = phi_arr[:,:,-1] = 0
+    
     return phi_arr
 
 def phi_guess(v0,disp0,vmin,dv,n):
@@ -304,6 +307,7 @@ def get_grad_negL(phi,*args):
     sigma2x, sigma2y, sigma2z = sigma2
     
     phi_unr = np.reshape(phi,n)
+    
     exphir = np.exp(phi)
     
     exphi_coo = scisp.coo_matrix(exphir)
@@ -401,7 +405,7 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
     s = 0
 
     logalpha0 = np.log10(alpha0)
-    logalphavals = np.linspace(logalpha0-5,logalpha0+5,10) #The initial set of alpha values
+    logalphavals = np.linspace(logalpha0-2,logalpha0+2,10) #The initial set of alpha values
 
     vxmin, vymin, vzmin = vmin
     dvx, dvy, dvz = dv
