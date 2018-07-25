@@ -329,7 +329,8 @@ def get_grad_negL(phi,*args):
     dphixhi_coo = scisp.coo_matrix(dphixhi_rav)
     dphixhi_csc = dphixhi_coo.tocsc().T
 
-    grad_L = np.asarray(K_term/N-exphi_csc-(alpha*dvx*dvy*dvz)*dphixhi_csc).reshape(nx*ny*nz,)
+#    grad_L = np.asarray(K_term/N-exphi_csc-(alpha*dvx*dvy*dvz)*dphixhi_csc).reshape(nx*ny*nz,)
+    grad_L = np.asarray(K_term/N-exphi_csc).reshape(nx*ny*nz,)
     
     return -1*grad_L
 
@@ -372,9 +373,9 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
     
     phi0r = np.ravel(phi0) #fmin_cg only takes one-dimensional inputs for the initial guess
     
-    mxl, phi_all = fmin_cg(get_negL, phi0r, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True,disp=disp)
+#    mxl, phi_all = fmin_cg(get_negL, phi0r, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True,disp=disp)
     
-#    mxl, phi_all = fmin_cg(get_negL, phi0r, gtol=5e-4, args=args, retall=True,disp=disp)
+    mxl, phi_all = fmin_cg(get_negL, phi0r, gtol=5e-4, args=args, retall=True,disp=disp)
     
     mxlnew = mxl.reshape(n)
 
