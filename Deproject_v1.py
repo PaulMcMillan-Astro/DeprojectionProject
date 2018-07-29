@@ -202,6 +202,43 @@ def sec_der(phi,sigma2,dv):
     
     return phi_arr
 
+def grad_sec_der(phi,*args):
+    
+    sigma2, dv, n = args
+    
+    nx, ny, nz = n
+    dvx, dvy, dvz = dv
+    dv2 = dv**2
+    sigma2x, sigma2y, sigma2z = sigma2
+    
+    phi_unr = np.reshape(phi,n)
+    
+    nxx, nyy, nzz = nx+2, ny+2, nz+2 
+
+    phip = np.zeros((nxx,nyy,nzz)) #new larger box
+
+    phip[1:-1,1:-1,1:-1] = phi_unr #puts the phi-box in the centre of our larger box
+    
+    kappa_sum = -2*(sigma2x/dvx**2+sigma2y/dvy**2+sigma2z/dvx**2)
+    
+    """Here we compute the contributions from all the adjacent bins simultaneously.
+    In every dimension we sum the phi values of box l-1 and l+1 and multiply with the relevant factor"""
+    
+    phi_fac = np.array([phip[0:nxx-2,1:-1,1:-1]+phip[2:nxx,1:-1,1:-1],
+                           phip[1:-1,0:nyy-2,1:-1]+phip[1:-1,2:nyy,1:-1],
+                           phip[1:-1,1:-1,0:nzz-2]+phip[1:-1,1:-1,2:nzz]])
+
+    phi_arrx = (sigma2[0]/dv2[0])**2*(phi_fac[0]-2*phi_unr)
+    phi_arry = (sigma2[1]/dv2[1])**2*(phi_fac[1]-2*phi_unr)
+    phi_arrz = (sigma2[2]/dv2[2])**2*(phi_fac[2]-2*phi_unr)
+    
+    phi_arr = -4*(phi_arrx+phi_arry+phi_arrz)
+    
+    phi_arr[0,:,:] = phi_arr[:,0,:] = phi_arr[:,:,0] = 0 #Due to lack of smoothness at edges, we set these values to 0
+    phi_arr[-1,:,:] = phi_arr[:,-1,:] = phi_arr[:,:,-1] = 0
+    
+    return np.ravel(phi_arr)
+
 def phi_guess(v0,disp0,vmin,dv,n):
     
     """Provides an initial guess of the phi values in each bin given an assumed distribution f(v). 
@@ -324,13 +361,13 @@ def get_grad_negL(phi,*args):
 
     kappa_sum = -2*(sigma2x/dvx**2+sigma2y/dvy**2+sigma2z/dvx**2)
 
-    dphixhi = sec_der(phi_unr,sigma2,dv)*kappa_sum #last term
+    dphixhi = grad_sec_der(phi,sigma2,dv,n) #last term
     dphixhi_rav = dphixhi.reshape((phi.shape[0],1)) #We ravel to obtain a 1D array of length nx*ny*nz
     dphixhi_coo = scisp.coo_matrix(dphixhi_rav)
     dphixhi_csc = dphixhi_coo.tocsc().T
 
-#    grad_L = np.asarray(K_term/N-exphi_csc-(alpha*dvx*dvy*dvz)*dphixhi_csc).reshape(nx*ny*nz,)
-    grad_L = np.asarray(K_term/N-exphi_csc).reshape(nx*ny*nz,)
+    grad_L = np.asarray(K_term/N-exphi_csc-((alpha*dvx*dvy*dvz)/2)*dphixhi_csc).reshape(nx*ny*nz,)
+#    grad_L = np.asarray(K_term/N-exphi_csc).reshape(nx*ny*nz,)
     
     return -1*grad_L
 
@@ -373,9 +410,9 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
     
     phi0r = np.ravel(phi0) #fmin_cg only takes one-dimensional inputs for the initial guess
     
-#    mxl, phi_all = fmin_cg(get_negL, phi0r, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True,disp=disp)
+    mxl, phi_all = fmin_cg(get_negL, phi0r, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True,disp=disp)
     
-    mxl, phi_all = fmin_cg(get_negL, phi0r, gtol=5e-4, args=args, retall=True,disp=disp)
+#    mxl, phi_all = fmin_cg(get_negL, phi0r, gtol=5e-4, args=args, retall=True,disp=disp)
     
     mxlnew = mxl.reshape(n)
 
