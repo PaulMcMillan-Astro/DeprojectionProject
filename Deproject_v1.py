@@ -164,7 +164,7 @@ def sec_der(phi,sigma2,dv):
     
     dv: The dimensions of each cell in km/s
     
-    
+     
     We create a new, larger box with dimensions n+2 centred on our phi-space box.
     This allows us to disregard any issues at the bins at the boundaries of our phi-space."""
     
