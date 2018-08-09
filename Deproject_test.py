@@ -194,26 +194,26 @@ def grad_negL_test(phi0,pvals,rhatvals,alpha,vmin,dv,n):
 
     args = Kvals_csc, N, alpha, dv, n, sigma2
 
-    gest_negL = np.zeros(len(phi0r))
-    
-    d0 = np.zeros(len(phi0r))
-    
-    L0 = get_negL(phi0r, Kvals_csc, N, alpha, dv, n, sigma2)
-    
-    eps = 1e-5
-   
-    for i in range(len(phi0r)):
-        d0[i] = 1
+#    gest_negL = np.zeros(len(phi0r))
+#    
+#    d0 = np.zeros(len(phi0r))
+#    
+#    L0 = get_negL(phi0r, Kvals_csc, N, alpha, dv, n, sigma2)
+#    
+#    eps = 1e-5
+#   
+#    for i in range(len(phi0r)):
+#        d0[i] = 1
+#        
+#        d = d0*eps
+#
+#        L1 = get_negL(phi0r+d, Kvals_csc, N, alpha, dv, n, sigma2)
+#        
+#        gest_negL[i] += (L1-L0)/d[i]
+#        
+#        d0[i] = 0
         
-        d = d0*eps
-
-        L1 = get_negL(phi0r+d, Kvals_csc, N, alpha, dv, n, sigma2)
-        
-        gest_negL[i] += (L1-L0)/d[i]
-        
-        d0[i] = 0
-        
-    #gest_negL = approx_fprime(phi0r,get_negL,1e-5,Kvals,N,alpha,dv,n,sigma2)
+    gest_negL = approx_fprime(phi0r,get_negL,1e-5,Kvals,N,alpha,dv,n,sigma2)
     
     grad_negL = get_grad_negL(phi0r, Kvals_csc, N, alpha, dv, n, sigma2)
     

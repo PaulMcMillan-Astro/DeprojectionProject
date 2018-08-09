@@ -168,7 +168,7 @@ def sec_der(phi,sigma2,dv):
     We create a new, larger box with dimensions n+2 centred on our phi-space box.
     This allows us to disregard any issues at the bins at the boundaries of our phi-space."""
     
-    nx, ny, nz = np.shape(phi)
+    nx, ny, nz = phi.shape
     dvx, dvy, dvz = dv
     dv2 = dv**2
     sigma2x, sigma2y, sigma2z = sigma2
@@ -209,35 +209,57 @@ def grad_sec_der(phi,*args):
     nx, ny, nz = n
     dvx, dvy, dvz = dv
     dv2 = dv**2
-    sigma2x, sigma2y, sigma2z = sigma2
     
     phi_unr = np.reshape(phi,n)
     
-    nxx, nyy, nzz = nx+2, ny+2, nz+2 
-
-    phip = np.zeros((nxx,nyy,nzz)) #new larger box
-
-    phip[1:-1,1:-1,1:-1] = phi_unr #puts the phi-box in the centre of our larger box
-    
-    kappa_sum = -2*(sigma2x/dvx**2+sigma2y/dvy**2+sigma2z/dvx**2)
+    eta = sec_der(phi_unr,sigma2,dv)
     
     """Here we compute the contributions from all the adjacent bins simultaneously.
     In every dimension we sum the phi values of box l-1 and l+1 and multiply with the relevant factor"""
     
-    phi_fac = np.array([phip[0:nxx-2,1:-1,1:-1]+phip[2:nxx,1:-1,1:-1],
-                           phip[1:-1,0:nyy-2,1:-1]+phip[1:-1,2:nyy,1:-1],
-                           phip[1:-1,1:-1,0:nzz-2]+phip[1:-1,1:-1,2:nzz]])
+    #### ATTEMPT 1
+    
+    eta_fac = np.array([eta[1:nx-3,2:-2,2:-2]+eta[3:nx-1,2:-2,2:-2],
+                           eta[2:-2,1:ny-3,2:-2]+eta[2:-2,3:ny-1,2:-2],
+                           eta[2:-2,2:-2,1:nz-3]+eta[2:-2,2:-2,3:nz-1]])
+    
+    eta_fac_rs = np.zeros((3,nx,ny,nz))
+    
+    eta_fac_rs[:,2:-2,2:-2,2:-2] = eta_fac
+    
+    eta[0:2,:,:] = eta[:,0:2,:] = eta[:,:,0:2] = 0
+    eta[nx-2:,:] = eta[:,ny-2,:] = eta[:,:,nz-2] = 0
+#    
+    #### ATTEMPT 2
+    
+#    eta_fac = np.array([eta[0:nx-2,1:-1,1:-1]+eta[2:nx,1:-1,1:-1],
+#                           eta[1:-1,0:ny-2,1:-1]+eta[1:-1,2:ny,1:-1],
+#                           eta[1:-1,1:-1,0:nz-2]+eta[1:-1,1:-1,2:nz]])
+#    
+#    eta_fac_rs = np.zeros((3,nx,ny,nz))
+#    
+#    eta_fac_rs[:,1:-1,1:-1,1:-1] = eta_fac
+    
+#    eta[0:2,:,:] = eta[:,0:2,:] = eta[:,:,0:2] = 0
+#    eta[nx-2:,:] = eta[:,ny-2,:] = eta[:,:,nz-2] = 0
+    
+    #### ATTEMPT 3
+    
+#    etap = np.zeros((nx+2,ny+2,nz+2))
+#    
+#    etap[1:-1,1:-1,1:-1] = eta
+#    
+#    eta_fac = np.array([etap[0:nx,1:-1,1:-1]+etap[2:nx+2,1:-1,1:-1],
+#                           etap[1:-1,0:ny,1:-1]+etap[1:-1,2:ny+2,1:-1],
+#                           etap[1:-1,1:-1,0:nz]+etap[1:-1,1:-1,2:nz+2]])
 
-    phi_arrx = (sigma2[0]/dv2[0])**2*(phi_fac[0]-2*phi_unr)
-    phi_arry = (sigma2[1]/dv2[1])**2*(phi_fac[1]-2*phi_unr)
-    phi_arrz = (sigma2[2]/dv2[2])**2*(phi_fac[2]-2*phi_unr)
+    eta_arrx = (sigma2[0]/dv2[0])*(eta_fac_rs[0]-2*eta)
+    eta_arry = (sigma2[1]/dv2[1])*(eta_fac_rs[1]-2*eta)
+    eta_arrz = (sigma2[2]/dv2[2])*(eta_fac_rs[2]-2*eta)
     
-    phi_arr = -4*(phi_arrx+phi_arry+phi_arrz)
-    
-    phi_arr[0,:,:] = phi_arr[:,0,:] = phi_arr[:,:,0] = 0 #Due to lack of smoothness at edges, we set these values to 0
-    phi_arr[-1,:,:] = phi_arr[:,-1,:] = phi_arr[:,:,-1] = 0
-    
-    return np.ravel(phi_arr)
+    eta_arr = 2*(eta_arrx+eta_arry+eta_arrz)
+
+    return np.ravel(eta_arr)
 
 def phi_guess(v0,disp0,vmin,dv,n):
     
@@ -323,7 +345,7 @@ def get_negL(phi,*args):
     Kphi_sumlog = np.log(Kphi_sum[Kphi_sum != 0]) #To make sure we don't get infinities
     Kphi_sum_tot = np.sum(Kphi_sumlog) #Gives the double sum in the first term
     
-    L_tilde = Kphi_sum_tot/N - exphi_csc.sum() -((alpha*dvx*dvy*dvz)/2)*phixhi_sum #eq. 31 in DB98
+    L_tilde = Kphi_sum_tot/N - exphi_csc.sum() - ((alpha*dvx*dvy*dvz)/2)*phixhi_sum #eq. 31 in DB98
     
     negL = -1*L_tilde #Since we want to maximize L_tilde, we should minimize -L_tilde 
     
@@ -359,15 +381,19 @@ def get_grad_negL(phi,*args):
     K_term0 = Kphi.multiply(Kphi_suminv)
     K_term = K_term0.sum(axis=0) #The final array with the first term for each cell
 
-    kappa_sum = -2*(sigma2x/dvx**2+sigma2y/dvy**2+sigma2z/dvx**2)
-
-    dphixhi = grad_sec_der(phi,sigma2,dv,n) #last term
-    dphixhi_rav = dphixhi.reshape((phi.shape[0],1)) #We ravel to obtain a 1D array of length nx*ny*nz
+    dphixhi_g = grad_sec_der(phi_unr,sigma2,dv,n)
+    dphixhi_rav = dphixhi_g.reshape((phi.shape[0],1)).T
     dphixhi_coo = scisp.coo_matrix(dphixhi_rav)
-    dphixhi_csc = dphixhi_coo.tocsc().T
+    dphixhi_csc = dphixhi_coo.tocsc()
 
     grad_L = np.asarray(K_term/N-exphi_csc-((alpha*dvx*dvy*dvz)/2)*dphixhi_csc).reshape(nx*ny*nz,)
-#    grad_L = np.asarray(K_term/N-exphi_csc).reshape(nx*ny*nz,)
+    
+#    grad_L_rs = grad_L.reshape((nx,ny,nz))
+#    
+#    grad_L_rs[:2,:,:] = grad_L_rs[:,:2,:] = grad_L_rs[:,:,:2] = 0 
+#    grad_L_rs[-2:,:,:] = grad_L_rs[:,-2:,:] = grad_L_rs[:,:,-2:] = 0
+#    
+#    grad_L_fx = np.ravel(grad_L_rs)
     
     return -1*grad_L
 
