@@ -44,13 +44,14 @@ def plot_fv(phi,plane,vmin,dv,n):
     fig, ax = plt.subplots(figsize=(8,6))
     
     ax.set_title('Contour plot of velocity distribution')
-    ax.set_xlim(x0,x1)
-    ax.set_ylim(y0,y1)
+    ax.set_xlim(-100,100)
+    ax.set_ylim(-100,100)
     ax.set_xlabel(xlab+' [km s$^{-1}$]',size='large')
     ax.set_ylabel(ylab+' [km s$^{-1}$]',size='large')
     
-    extent = [xbins[0], xbins[-1], ybins[0], ybins[-1]]
-    im = ax.imshow(twodfv.T,origin='lower',interpolation='bilinear',vmin=0,vmax=twodfv.max(),cmap = plt.cm.get_cmap('jet'),extent=extent)
+    extent = [xbins[0],xbins[-1],ybins[0],ybins[-1]]
+#    im = ax.imshow(twodfv.T,origin='lower',interpolation='bilinear',vmin=0,vmax=twodfv.max(),cmap = plt.cm.get_cmap('plasma'),extent=extent)
+    im = ax.contourf(twodfv.T,20,origin='lower',cmap = plt.cm.get_cmap('bone_r'),extent=extent)
     
     cb = plt.colorbar(im,orientation='vertical', extend='max')
     plt.setp(cb.ax.get_yticklabels(), visible=False)

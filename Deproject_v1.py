@@ -9,6 +9,116 @@ from astropy.io import ascii
 from scipy import sparse as scisp
 from scipy.optimize import fmin_cg
 
+def calc_p_rhat(sample):
+    
+    """Function that computes the values of rhat and the tangential velocity for a given sample"""
+
+#Oort constant values from Bovy (2018)
+    A = (15.3*(u.km/(u.s*u.kpc))).to(1/u.yr)
+    B = (-11.9*(u.km/(u.s*u.kpc))).to(1/u.yr)
+
+    bvals = sample.b.to(u.deg)
+    lvals = sample.l.to(u.deg)
+
+    mul_obs = sample.pm_l_cosb.to(1/u.yr,equivalencies = u.dimensionless_angles())
+    mub_obs = sample.pm_b.to(1/u.yr,equivalencies = u.dimensionless_angles())
+
+    """Computation of the relevant quantities
+
+        l,b: Galactic coordinates
+        s: the distance obtained by inverting the parallax
+        mul, mub: proper motion in l and b
+        pvals: Tangential velocities obtained from eq. 2 in DB98
+        rhatvals: The unit vector of each star
+        vmin: Vector containing the minimum velocities in v-space
+        n: The number of cells we want in each dimension of our v-space box
+        dv: Step sizes for each dimension"""
+
+    b = np.deg2rad(bvals).value
+    l = np.deg2rad(lvals).value
+    cosl = np.cos(l)
+    cosb = np.cos(b)
+    sinl = np.sin(l)
+    sinb = np.sin(b)
+    s = sample.distance
+
+    mul = mul_obs - A*np.cos(2*l)-B
+    mub = mub_obs + A*np.sin(2*l)*cosb*sinb
+
+    pvals = s*np.array([-sinl*cosb*mul - cosl*sinb*mub,
+                     cosl*cosb*mul - sinl*sinb*mub,
+                     cosb*mub])/u.yr
+
+    rhatvals = np.array([cosb*cosl, cosb*sinl, sinb]).T
+    pvals = pvals.to(u.km/u.s).value.T
+    
+    return pvals, rhatvals 
+
+#Data selection
+
+def apply_cuts(sample,G_mean,BP_RP,additional_cuts=[]):
+    
+    idx_mask = np.in1d(sample_gc.b.value,sample.b.value)
+    idx = np.argwhere(idx_mask).reshape(len(sample))
+    
+    if all(idx_mask):
+        idx = None
+        
+    chinu_raw = np.stack((np.exp(-0.4*(G_mean.value-19.5)), np.ones((G_mean.shape))),axis = 0)
+    
+    chinu = chinu_raw.reshape((2,len(sample)))
+
+    """Next we perform the standard cuts which are provided in Appendix B of the Observational HR-Diagram paper of
+        Gaia Collaboration et al (2018)"""
+
+    standard_cuts = [parallax_over_error[idx]<10,visibility_periods_used[idx]<8,phot_g_mean_flux_over_error[idx]<50,\
+               phot_rp_mean_flux_over_error[idx]<20,phot_bp_mean_flux_over_error[idx]<20,\
+               phot_bp_rp_excess_factor[idx] > 1.3+0.06*(phot_bp_mean_mag[idx]-phot_rp_mean_mag[idx])**2,\
+               phot_bp_rp_excess_factor[idx] < 1.0+0.015*(phot_bp_mean_mag[idx]-phot_rp_mean_mag[idx])**2,\
+               astrometric_chi2_al[idx]/(astrometric_n_good_obs_al[idx]-5)>(1.44*np.amax(chinu,axis=0)).reshape((len(sample)))]
+
+    """Additional cuts on e.g. distance, coordinates, tangential velocity etc. are provided in the addditional_cuts list"""
+    ac_sliced=[]
+    
+    for i in additional_cuts:
+        
+        try:
+            ac_sliced.append(i[idx])
+        except IndexError:
+            ac_sliced.append(i)
+            continue
+    
+#     ac_sliced = [i[idx] for i in additional_cuts]
+    
+    try:
+        cut_list = np.concatenate((standard_cuts,ac_sliced))
+    except ValueError:
+        cut_list = standard_cuts
+        pass
+    
+    cut_list_rs = [np.reshape(i,(len(sample))) for i in cut_list]
+    bad_idx_list = [np.argwhere(i) for i in cut_list_rs]
+    bad_idx_arr = np.concatenate(bad_idx_list)
+    
+    bad_idx_arr1 = bad_idx_arr.reshape((len(bad_idx_arr)))
+
+    nan_idx = np.concatenate([np.ravel(np.argwhere(np.isnan(G_mean_raw[idx]))),np.ravel(np.argwhere(np.isnan(BP_RP_raw[idx])))]) 
+    nanvals = np.unique(nan_idx)
+
+    bad_idx_arr2 = np.concatenate([bad_idx_arr1,nanvals])
+
+    bad_idx = np.unique(bad_idx_arr2)
+    # bad_idx = nanvals
+
+    mask = np.full((sample.shape),True)
+    mask[bad_idx] = False
+
+    sample_new = sample[mask]
+    G_mean_new = G_mean[mask]
+    BP_RP_new = BP_RP[mask]
+    
+    return sample_new, G_mean_new, BP_RP_new
+
 def model_sample(N,v0,disp0): 
 
     """Generates a simple model solar neighbourhood star sample in a Galactic frame of reference assuming a 
@@ -37,7 +147,7 @@ def model_sample(N,v0,disp0):
     psample = coord.Galactic(u=psx,v=psy,w=psz,U=psvx*(u.km/u.s),
                              V=psvy*(u.km/u.s),W=psvz*(u.km/u.s),representation_type=coord.CartesianRepresentation,differential_type=coord.CartesianDifferential)
     
-    psample.set_representation_cls(coord.SphericalRepresentation)
+    psample.set_representation_cls(coord.SphericalRepresentation,coord.SphericalCosLatDifferential)
     
     return psample
 
@@ -219,45 +329,35 @@ def grad_sec_der(phi,*args):
     
     #### ATTEMPT 1
     
-    eta_fac = np.array([eta[1:nx-3,2:-2,2:-2]+eta[3:nx-1,2:-2,2:-2],
-                           eta[2:-2,1:ny-3,2:-2]+eta[2:-2,3:ny-1,2:-2],
-                           eta[2:-2,2:-2,1:nz-3]+eta[2:-2,2:-2,3:nz-1]])
-    
-    eta_fac_rs = np.zeros((3,nx,ny,nz))
-    
-    eta_fac_rs[:,2:-2,2:-2,2:-2] = eta_fac
-    
-    eta[0:2,:,:] = eta[:,0:2,:] = eta[:,:,0:2] = 0
-    eta[nx-2:,:] = eta[:,ny-2,:] = eta[:,:,nz-2] = 0
-#    
-    #### ATTEMPT 2
-    
-#    eta_fac = np.array([eta[0:nx-2,1:-1,1:-1]+eta[2:nx,1:-1,1:-1],
-#                           eta[1:-1,0:ny-2,1:-1]+eta[1:-1,2:ny,1:-1],
-#                           eta[1:-1,1:-1,0:nz-2]+eta[1:-1,1:-1,2:nz]])
+#    eta_fac = np.array([eta[1:nx-3,2:-2,2:-2]+eta[3:nx-1,2:-2,2:-2],
+#                           eta[2:-2,1:ny-3,2:-2]+eta[2:-2,3:ny-1,2:-2],
+#                           eta[2:-2,2:-2,1:nz-3]+eta[2:-2,2:-2,3:nz-1]])
 #    
 #    eta_fac_rs = np.zeros((3,nx,ny,nz))
 #    
-#    eta_fac_rs[:,1:-1,1:-1,1:-1] = eta_fac
+#    eta_fac_rs[:,2:-2,2:-2,2:-2] = eta_fac
     
 #    eta[0:2,:,:] = eta[:,0:2,:] = eta[:,:,0:2] = 0
 #    eta[nx-2:,:] = eta[:,ny-2,:] = eta[:,:,nz-2] = 0
-    
-    #### ATTEMPT 3
-    
-#    etap = np.zeros((nx+2,ny+2,nz+2))
 #    
-#    etap[1:-1,1:-1,1:-1] = eta
-#    
-#    eta_fac = np.array([etap[0:nx,1:-1,1:-1]+etap[2:nx+2,1:-1,1:-1],
-#                           etap[1:-1,0:ny,1:-1]+etap[1:-1,2:ny+2,1:-1],
-#                           etap[1:-1,1:-1,0:nz]+etap[1:-1,1:-1,2:nz+2]])
+    #### ATTEMPT 2
+    
+    eta_fac = np.array([eta[0:nx-2,1:-1,1:-1]+eta[2:nx,1:-1,1:-1],
+                           eta[1:-1,0:ny-2,1:-1]+eta[1:-1,2:ny,1:-1],
+                           eta[1:-1,1:-1,0:nz-2]+eta[1:-1,1:-1,2:nz]])
+    
+    eta_fac_rs = np.zeros((3,nx,ny,nz))
+    
+    eta_fac_rs[:,1:-1,1:-1,1:-1] = eta_fac
 
     eta_arrx = (sigma2[0]/dv2[0])*(eta_fac_rs[0]-2*eta)
     eta_arry = (sigma2[1]/dv2[1])*(eta_fac_rs[1]-2*eta)
     eta_arrz = (sigma2[2]/dv2[2])*(eta_fac_rs[2]-2*eta)
     
     eta_arr = 2*(eta_arrx+eta_arry+eta_arrz)
+    
+    eta_arr[0:2,:,:] = eta_arr[:,0:2,:] = eta_arr[:,:,0:2] = 0
+    eta_arr[nx-2:,:] = eta_arr[:,ny-2,:] = eta_arr[:,:,nz-2] = 0
 
     return np.ravel(eta_arr)
 
