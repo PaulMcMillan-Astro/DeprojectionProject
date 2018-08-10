@@ -1,5 +1,6 @@
 from Deproject_v1 import *
 from sys import argv
+import os
 
 import time
 start_time = time.time()
@@ -151,16 +152,52 @@ elif whatdata == 'pseudo':
             astrometric_n_good_obs_al = data_raw['ASTROMETRIC_N_GOOD_OBS_AL']
         
         parallax_raw = parallax_raw.to(u.mas) #This is done to avoid having to deal with inconsitencies in units of the datasets
-        G_mean_raw = G_mean_raw.to(u.mag)
-        BP_RP_raw = BP_RP_raw.to(u.mag)
+        G_mean = G_mean_raw.to(u.mag)
+        BP_RP = BP_RP_raw.to(u.mag)
         
         dist = parallax_raw.to(u.kpc,equivalencies=u.parallax())
         
-        sample_raw = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
+        sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
         
-        sample_nocut = sample_raw.transform_to(coord.Galactic)
+        sample_raw = sample_icrs.transform_to(coord.Galactic)
         
-        sample = apply_cuts(sample_nocut,G_mean_raw,BP_RP_raw)[0]
+        idx = None #residual from previous code that I am too lazy to fix 
+            
+        chinu_raw = np.stack((np.exp(-0.4*(G_mean.value-19.5)), np.ones((G_mean.shape))),axis = 0)
+        
+        chinu = chinu_raw.reshape((2,len(sample_raw)))
+    
+        """Next we perform the standard cuts which are provided in Appendix B of the Observational HR-Diagram paper of
+            Gaia Collaboration et al (2018)"""
+    
+        standard_cuts = [parallax_over_error[idx]<10,visibility_periods_used[idx]<8,phot_g_mean_flux_over_error[idx]<50,\
+                   phot_rp_mean_flux_over_error[idx]<20,phot_bp_mean_flux_over_error[idx]<20,\
+                   phot_bp_rp_excess_factor[idx] > 1.3+0.06*(phot_bp_mean_mag[idx]-phot_rp_mean_mag[idx])**2,\
+                   phot_bp_rp_excess_factor[idx] < 1.0+0.015*(phot_bp_mean_mag[idx]-phot_rp_mean_mag[idx])**2,\
+                   astrometric_chi2_al[idx]/(astrometric_n_good_obs_al[idx]-5)>(1.44*np.amax(chinu,axis=0)).reshape((len(sample_raw)))]
+
+        cut_list = standard_cuts
+        
+        cut_list_rs = [np.reshape(i,(len(sample_raw))) for i in cut_list]
+        bad_idx_list = [np.argwhere(i) for i in cut_list_rs]
+        bad_idx_arr = np.concatenate(bad_idx_list)
+        
+        bad_idx_arr1 = bad_idx_arr.reshape((len(bad_idx_arr)))
+    
+        nan_idx = np.concatenate([np.ravel(np.argwhere(np.isnan(G_mean_raw[idx]))),np.ravel(np.argwhere(np.isnan(BP_RP_raw[idx])))]) 
+        nanvals = np.unique(nan_idx)
+    
+        bad_idx_arr2 = np.concatenate([bad_idx_arr1,nanvals])
+    
+        bad_idx = np.unique(bad_idx_arr2)
+        # bad_idx = nanvals
+    
+        mask = np.full((sample_raw.shape),True)
+        mask[bad_idx] = False
+    
+        sample = sample_raw[mask]
+        G_mean_new = G_mean[mask]
+        BP_RP_new = BP_RP[mask]
     else:
         sample = model_sample(N,v0,v_disp)
     
