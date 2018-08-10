@@ -33,6 +33,8 @@ def plot_fv(phi,plane,vmin,dv,n):
         
     fv = np.exp(phi)
     
+    fvlog = np.log10(fv+1)
+    
     twodfv = np.sum(fv,axis=axsum)
     
     xbins = np.arange(x0,x1+dx,dx)
@@ -51,7 +53,8 @@ def plot_fv(phi,plane,vmin,dv,n):
     
     extent = [xbins[0],xbins[-1],ybins[0],ybins[-1]]
 #    im = ax.imshow(twodfv.T,origin='lower',interpolation='bilinear',vmin=0,vmax=twodfv.max(),cmap = plt.cm.get_cmap('plasma'),extent=extent)
-    im = ax.contourf(twodfv.T,20,origin='lower',cmap = plt.cm.get_cmap('bone_r'),extent=extent)
+    im = ax.contourf(twodfv.T,10,origin='lower',cmap = plt.cm.get_cmap('bone_r'),extent=extent,linestyles='solid')
+    ax.contour(twodfv.T,10,origin='lower',extent=extent,colors='k',linewidths=0.5)
     
     cb = plt.colorbar(im,orientation='vertical', extend='max')
     plt.setp(cb.ax.get_yticklabels(), visible=False)
@@ -60,7 +63,6 @@ def plot_fv(phi,plane,vmin,dv,n):
     plt.show()
     
     return 
-
 def plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
     
     L_vals = L_collector(phi_all,pvals,rhatvals,vmin,dv,n,alpha)
