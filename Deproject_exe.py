@@ -93,14 +93,14 @@ elif whatdata == 'pseudo':
             v_guess = np.array(vars_[6][0].split(',')[:],dtype=float)
             disp_guess = np.array(vars_[7][0].split(',')[:],dtype=float)
             alpha = float(vars_[8][0])
-            datafile = vars_[9][0]
+            datafile = vars_[9][0].rstrip('\n')
             break
         
     if len(datafile) != 0:
         os.chdir("/home/jooehn/Documents/Summer project/GDR2 data")
 
 
-        data_raw = Table.read('gaiadr2_100pc.fits')
+        data_raw = Table.read(str(datafile))
         
         
         try:
