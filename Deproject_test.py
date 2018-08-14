@@ -133,15 +133,6 @@ def sanity_check(pvals,rhatvals,phi,vmin,dv,n):
     
     """Here we make sure to multipy the probability distribution f(v) with the centre values of the velocity bins in
     each dimension. """
-#    vxmean = np.sum(vxc[None,:,None]*fv)/np.sum(fv)
-#    vymean = np.sum(vyc[:,None,None]*fv)/np.sum(fv) 
-#    vzmean = np.sum(vzc[None,None,:]*fv)/np.sum(fv)
-#    vmean = np.array([vxmean,vymean,vzmean])
-#    
-#    dispx = np.sum((vxc[None,:,None]**2*fv))/np.sum(fv)-vxmean**2
-#    dispy = np.sum((vyc[:,None,None]**2*fv))/np.sum(fv)-vymean**2
-#    dispz = np.sum((vzc[None,None,:]**2*fv))/np.sum(fv)-vzmean**2
-#    disp = np.sqrt(np.array([dispx,dispy,dispz]))
 	
     vxmean = np.sum(vxc[:,None,None]*fv)/np.sum(fv)
     vymean = np.sum(vyc[None,:,None]*fv)/np.sum(fv) 

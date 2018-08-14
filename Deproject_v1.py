@@ -149,8 +149,6 @@ def calc_K(pk,rhat,vmin,dv,n):
     non_zero = np.nonzero(line_len)
     line_len = line_len[non_zero] #Removes duplicate intersections
     line_bins = line_bins[non_zero]
-    
-    Kvals = line_len/(dvx*dvy*dvz)
 
     K[line_bins[:,0],line_bins[:,1],line_bins[:,2]] = line_len/(dvx*dvy*dvz)
     
@@ -224,28 +222,26 @@ def sec_der(phi,sigma2,dv):
 
     phip[1:-1,1:-1,1:-1] = phi #puts the phi-box in the centre of our larger box
     
-    kappa_sum = -2*(sigma2x/dvx**2+sigma2y/dvy**2+sigma2z/dvx**2)
-    
     """Here we compute the contributions from all the adjacent bins simultaneously.
     In every dimension we sum the phi values of box l-1 and l+1 and multiply with the relevant factor"""
     
     phi_fac = np.array([phip[0:nxx-2,1:-1,1:-1]+phip[2:nxx,1:-1,1:-1],
                            phip[1:-1,0:nyy-2,1:-1]+phip[1:-1,2:nyy,1:-1],
                            phip[1:-1,1:-1,0:nzz-2]+phip[1:-1,1:-1,2:nzz]])
-
-    phi_arrx = (sigma2[0]/dv2[0])*phi_fac[0]
-    phi_arry = (sigma2[1]/dv2[1])*phi_fac[1]
-    phi_arrz = (sigma2[2]/dv2[2])*phi_fac[2]
+    
+    phi_arrx = (sigma2[0]/dv2[0])*(phi_fac[0]-2*phi)
+    phi_arry = (sigma2[1]/dv2[1])*(phi_fac[1]-2*phi)
+    phi_arrz = (sigma2[2]/dv2[2])*(phi_fac[2]-2*phi)
     
     """We sum all contributions from adjacent boxes and finally add the terms for each box l. 
     Yields a box with the same dimensions as phi, containing the second derivative values for each bin."""
     
-    phi_arr = phi_arrx+phi_arry+phi_arrz+kappa_sum*phi
+    phi_arr = phi_arrx+phi_arry+phi_arrz
     
     phi_arr[0,:,:] = phi_arr[:,0,:] = phi_arr[:,:,0] = 0 #Due to lack of smoothness at edges, we set these values to 0
     phi_arr[-1,:,:] = phi_arr[:,-1,:] = phi_arr[:,:,-1] = 0
     
-    return phi_arr
+    return phi_arr**2
 
 def grad_sec_der(phi,*args):
     
@@ -260,22 +256,7 @@ def grad_sec_der(phi,*args):
     eta = sec_der(phi_unr,sigma2,dv)
     
     """Here we compute the contributions from all the adjacent bins simultaneously.
-    In every dimension we sum the phi values of box l-1 and l+1 and multiply with the relevant factor"""
-    
-    #### ATTEMPT 1
-    
-#    eta_fac = np.array([eta[1:nx-3,2:-2,2:-2]+eta[3:nx-1,2:-2,2:-2],
-#                           eta[2:-2,1:ny-3,2:-2]+eta[2:-2,3:ny-1,2:-2],
-#                           eta[2:-2,2:-2,1:nz-3]+eta[2:-2,2:-2,3:nz-1]])
-#    
-#    eta_fac_rs = np.zeros((3,nx,ny,nz))
-#    
-#    eta_fac_rs[:,2:-2,2:-2,2:-2] = eta_fac
-    
-#    eta[0:2,:,:] = eta[:,0:2,:] = eta[:,:,0:2] = 0
-#    eta[nx-2:,:] = eta[:,ny-2,:] = eta[:,:,nz-2] = 0
-#    
-    #### ATTEMPT 2
+    In every dimension we sum the eta values of box l-1 and l+1 and multiply with the relevant factor"""
     
     eta_fac = np.array([eta[0:nx-2,1:-1,1:-1]+eta[2:nx,1:-1,1:-1],
                            eta[1:-1,0:ny-2,1:-1]+eta[1:-1,2:ny,1:-1],
@@ -292,7 +273,7 @@ def grad_sec_der(phi,*args):
     eta_arr = 2*(eta_arrx+eta_arry+eta_arrz)
     
     eta_arr[0:2,:,:] = eta_arr[:,0:2,:] = eta_arr[:,:,0:2] = 0
-    eta_arr[nx-2:,:] = eta_arr[:,ny-2,:] = eta_arr[:,:,nz-2] = 0
+    eta_arr[nx-2:,:,:] = eta_arr[:,ny-2:,:] = eta_arr[:,:,nz-2:] = 0
 
     return np.ravel(eta_arr)
 
@@ -363,7 +344,7 @@ def get_negL(phi,*args):
     phi_unr = np.reshape(phi,n)
     
     phixhi = sec_der(phi_unr,sigma2,dv) #last term
-    phixhi_sum = np.sum(phixhi**2)
+    phixhi_sum = np.sum(phixhi)
     exphir = np.exp(phi)
     
     """We use sparse matrices in our computation of L_tilde because our K- arrays have low 
@@ -416,23 +397,16 @@ def get_grad_negL(phi,*args):
     K_term0 = Kphi.multiply(Kphi_suminv)
     K_term = K_term0.sum(axis=0) #The final array with the first term for each cell
 
-    dphixhi_g = grad_sec_der(phi_unr,sigma2,dv,n)
-    dphixhi_rav = dphixhi_g.reshape((phi.shape[0],1)).T
+    dphixhi = grad_sec_der(phi_unr,sigma2,dv,n)
+    dphixhi_rav = dphixhi.reshape((phi.shape[0],1)).T
     dphixhi_coo = scisp.coo_matrix(dphixhi_rav)
     dphixhi_csc = dphixhi_coo.tocsc()
 
     grad_L = np.asarray(K_term/N-exphi_csc-((alpha*dvx*dvy*dvz)/2)*dphixhi_csc).reshape(nx*ny*nz,)
     
-#    grad_L_rs = grad_L.reshape((nx,ny,nz))
-#    
-#    grad_L_rs[:2,:,:] = grad_L_rs[:,:2,:] = grad_L_rs[:,:,:2] = 0 
-#    grad_L_rs[-2:,:,:] = grad_L_rs[:,-2:,:] = grad_L_rs[:,:,-2:] = 0
-#    
-#    grad_L_fx = np.ravel(grad_L_rs)
-    
     return -1*grad_L
 
-def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1):
+def max_L(alpha, pvals, rhatvals, vmin, dv, n,phi0_guess = [],v0_guess=[],disp_guess=[], disp=1):
     
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_negL().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
@@ -452,7 +426,10 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=[],disp_guess=[], disp=1)
     if disp_guess == []:
         disp_guess = sigma
     
-    phi0 = phi_guess(v0_guess,disp_guess,vmin,dv,n) #We obtain phi given our initial guess of the velocity distribution
+    if phi0_guess == []:
+        phi0 = phi_guess(v0_guess,disp_guess,vmin,dv,n) #We obtain phi given our initial guess of the velocity distribution
+    else:
+        phi0 = phi0_guess
 
     K0 = np.ravel(calc_K(pvals[0],rhatvals[0],vmin,dv,n))
     
