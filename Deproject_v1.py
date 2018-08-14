@@ -241,39 +241,49 @@ def sec_der(phi,sigma2,dv):
     phi_arr[0,:,:] = phi_arr[:,0,:] = phi_arr[:,:,0] = 0 #Due to lack of smoothness at edges, we set these values to 0
     phi_arr[-1,:,:] = phi_arr[:,-1,:] = phi_arr[:,:,-1] = 0
     
-    return phi_arr**2
+    return phi_arr
 
 def grad_sec_der(phi,*args):
     
     sigma2, dv, n = args
     
     nx, ny, nz = n
-    dvx, dvy, dvz = dv
     dv2 = dv**2
     
-    phi_unr = np.reshape(phi,n)
+#     phi_unr = np.reshape(phi,n)
     
-    eta = sec_der(phi_unr,sigma2,dv)
+    phi_fac = np.array([phi[0:nx-2,1:-1,1:-1]+phi[2:nx,1:-1,1:-1],
+                           phi[1:-1,0:ny-2,1:-1]+phi[1:-1,2:ny,1:-1],
+                           phi[1:-1,1:-1,0:nz-2]+phi[1:-1,1:-1,2:nz]])
     
-    """Here we compute the contributions from all the adjacent bins simultaneously.
-    In every dimension we sum the eta values of box l-1 and l+1 and multiply with the relevant factor"""
+    phip = phi[1:-1,1:-1,1:-1]
     
-    eta_fac = np.array([eta[0:nx-2,1:-1,1:-1]+eta[2:nx,1:-1,1:-1],
-                           eta[1:-1,0:ny-2,1:-1]+eta[1:-1,2:ny,1:-1],
-                           eta[1:-1,1:-1,0:nz-2]+eta[1:-1,1:-1,2:nz]])
+    phi_arrx = (sigma2[0]/dv2[0])*(phi_fac[0]-2*phip)
+    phi_arry = (sigma2[1]/dv2[1])*(phi_fac[1]-2*phip)
+    phi_arrz = (sigma2[2]/dv2[2])*(phi_fac[2]-2*phip)
+    
+    """We sum all contributions from adjacent boxes and finally add the terms for each box l. 
+    Yields a box with the same dimensions as phi, containing the second derivative values for each bin."""
+    
+    eta = phi_arrx+phi_arry+phi_arrz
+    
+    eta_fac = np.array([eta[0:nx-4,1:-1,1:-1]+eta[2:nx-2,1:-1,1:-1],
+                           eta[1:-1,0:ny-4,1:-1]+eta[1:-1,2:ny-2,1:-1],
+                           eta[1:-1,1:-1,0:nz-4]+eta[1:-1,1:-1,2:nz-2]])
     
     eta_fac_rs = np.zeros((3,nx,ny,nz))
     
-    eta_fac_rs[:,1:-1,1:-1,1:-1] = eta_fac
+    eta_fac_rs[:,2:-2,2:-2,2:-2] = eta_fac
+    
+    etap = np.zeros((n))
+    
+    etap[2:-2,2:-2,2:-2] = eta[1:-1,1:-1,1:-1]
 
-    eta_arrx = (sigma2[0]/dv2[0])*(eta_fac_rs[0]-2*eta)
-    eta_arry = (sigma2[1]/dv2[1])*(eta_fac_rs[1]-2*eta)
-    eta_arrz = (sigma2[2]/dv2[2])*(eta_fac_rs[2]-2*eta)
+    eta_arrx = (sigma2[0]/dv2[0])*(eta_fac_rs[0]-2*etap)
+    eta_arry = (sigma2[1]/dv2[1])*(eta_fac_rs[1]-2*etap)
+    eta_arrz = (sigma2[2]/dv2[2])*(eta_fac_rs[2]-2*etap)
     
     eta_arr = 2*(eta_arrx+eta_arry+eta_arrz)
-    
-    eta_arr[0:2,:,:] = eta_arr[:,0:2,:] = eta_arr[:,:,0:2] = 0
-    eta_arr[nx-2:,:,:] = eta_arr[:,ny-2:,:] = eta_arr[:,:,nz-2:] = 0
 
     return np.ravel(eta_arr)
 
@@ -343,7 +353,7 @@ def get_negL(phi,*args):
     
     phi_unr = np.reshape(phi,n)
     
-    phixhi = sec_der(phi_unr,sigma2,dv) #last term
+    phixhi = sec_der(phi_unr,sigma2,dv)**2 #last term
     phixhi_sum = np.sum(phixhi)
     exphir = np.exp(phi)
     
