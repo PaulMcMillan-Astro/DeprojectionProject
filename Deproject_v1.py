@@ -56,24 +56,52 @@ def calc_p_rhat(sample):
 
 def model_sample(N,v0,disp0): 
 
-    """Generates a simple model solar neighbourhood star sample in a Galactic frame of reference assuming a 
-    Gaussian velocity distribution. The stars have distances from the Sun that are in the range [10,100] pc.
+     """Generates a simple model solar neighbourhood star sample in a Galactic frame of reference assuming a
+    velocity distribution that is a sum of three predefined Gaussians.
+    
+    If one wishes to use other mean velocities, change these in mu0, mu1 and mu2, while the dispersions are changed
+    in disp0, disp1 and disp2. The relative weights, w1, w2, w3 determine how many of the stars that belong to
+    each Gaussian. As for now, they're just set to be ~1/3.
+    
+    The stars have distances from the Sun that are in the range [10,100] pc.
     
     Takes the following arugments:
     
-    N: Number of stars in the sample
-    v0: 3d array specifying the mean velocities of the Gaussian distributions in x, y, z
-    disp: 3d array specifying the velocity dispersions of the distributions in x, y, z"""
+    N: Number of stars in the sample"""
     
     xmax, ymax, zmax = np.array([100,100,100]) / np.sqrt(3)
     xmin, ymin, zmin = -xmax,-ymax,-zmax
+    
+    w0 = w1 = 0.33
+    w2 = 1-(w0+w1)
+    
+    mu0 = np.array([30,30,30])
+    mu1 = np.array([-20,-20,-20])
+    mu2 = np.array([15,15,15])
+    
+    disp0 = np.array([25,23,27])
+    disp1 = np.array([13,17,15])
+    disp2 = np.array([9,14,12])
+    
+    w_sample = np.random.random_sample(N)
     
     psx = (np.random.rand(N)*(xmax-xmin)+xmin)*u.pc
     psy = (np.random.rand(N)*(ymax-ymin)+ymin)*u.pc
     psz = (np.random.rand(N)*(zmax-zmin)+zmin)*u.pc
     
-    scale = np.random.randn(N,3)
-    psvels = v0 + scale*disp0
+    from_g0 = np.where(w_sample < w0) #We get the indices of the stars that belong to the first Gaussian
+    from_g1 = np.where((w0 <= w_sample) & (w_sample < (w0+w1)))
+    from_g2 = np.where(w_sample > (1-w2))
+    
+    scale0 = np.random.randn(len(from_g0[0]),3)
+    scale1 = np.random.randn(len(from_g1[0]),3)
+    scale2 = np.random.randn(len(from_g2[0]),3)
+    
+    psvels = np.zeros((N,3))
+    
+    psvels[from_g0] = mu0+scale0*disp0 #We exchange our empty velocity values with the ones obtained from each Gaussian
+    psvels[from_g1] = mu1+scale1*disp1
+    psvels[from_g2] = mu2+scale2*disp2
     
     psvx, psvy, psvz = psvels.T
     
