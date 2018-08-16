@@ -88,7 +88,11 @@ elif whatdata == 'pseudo':
             v_guess = np.array(vars_[4][0].split(',')[:],dtype=float)
             disp_guess = np.array(vars_[5][0].split(',')[:],dtype=float)
             alpha = float(vars_[6][0])
-            datafile = vars_[7][0].rstrip('\n')
+            try:
+                datafile = vars_[7][0].rstrip('\n')
+            except IndexError:
+                datafile = []
+                pass
             break
         
     if any([len(datafile) != 0,whatdata == 'data']):

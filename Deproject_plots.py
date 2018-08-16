@@ -4,6 +4,9 @@ plt.style.use('classic')
 
 def plot_fv(phi,plane,vmin,dv,n):
     
+    """Function that plots the velocity distribution f(v) that corresponds to
+    a given array of phi-values."""
+    
     dvx, dvy, dvz = dv
     nx, ny, nz = n
     vxmin, vymin, vzmin = vmin
@@ -65,6 +68,8 @@ def plot_fv(phi,plane,vmin,dv,n):
     return 
 def plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
     
+    """Function that plots all the values found using L_collector."""
+    
     L_vals = L_collector(phi_all,pvals,rhatvals,vmin,dv,n,alpha)
     
     fig, ax = plt.subplots()
@@ -81,6 +86,9 @@ def plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
     return
 
 def L_collector(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
+    
+    """Function that takes an array with all values of phi from the maximisation
+    scheme and computes the L value for each iteration."""
     
     dvx, dvy, dvz = dv
     nx, ny, nz = n
@@ -175,6 +183,9 @@ def plot_K(plane, pvals, rhatvals, vmin, dv, n):
     plt.show()
     
 def plot_grad_L(phi, plane, alpha, pvals, rhatvals, vmin, dv, n):
+    
+    """Plots the gradient in the middle of a box depending on what plane
+    one has provided as input"""
     
     from scipy.optimize import approx_fprime
     

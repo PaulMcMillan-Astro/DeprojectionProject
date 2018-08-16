@@ -467,6 +467,7 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,phi0_guess = [],v0_guess=[],disp_g
     
     if phi0_guess == []:
         phi0 = phi_guess(v0_guess,disp_guess,vmin,dv,n) #We obtain phi given our initial guess of the velocity distribution
+        phi0 += np.random.uniform(-1,1,size=(n))*10 #We add some random noise to avoid the maximisation failing
     else:
         phi0 = phi0_guess
 
