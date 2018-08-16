@@ -54,36 +54,62 @@ def calc_p_rhat(sample):
 
     return pvals, rhatvals
 
-def model_sample(N,v0,disp0):
-
+def model_sample(N):
     """Generates a simple model solar neighbourhood star sample in a Galactic frame of reference assuming a
-    Gaussian velocity distribution. The stars have distances from the Sun that are in the range [10,100] pc.
-
+    velocity distribution that is a sum of three predefined Gaussians.
+    
+    If one wishes to use other mean velocities, change these in mu0, mu1 and mu2, while the dispersions are changed
+    in disp0, disp1 and disp2. The relative weights, w1, w2, w3 determine how many of the stars that belong to
+    each Gaussian. As for now, they're just set to be ~1/3.
+    
+    The stars have distances from the Sun that are in the range [10,100] pc.
+    
     Takes the following arugments:
-
-    N: Number of stars in the sample
-    v0: 3d array specifying the mean velocities of the Gaussian distributions in x, y, z
-    disp: 3d array specifying the velocity dispersions of the distributions in x, y, z"""
-
-    xmax, ymax, zmax = np.array([100,100,100]) / np.sqrt(3)
+    
+    N: Number of stars in the sample"""
+    
+    xmax, ymax, zmax = np.array([100,100,100])/np.sqrt(3)    
     xmin, ymin, zmin = -xmax,-ymax,-zmax
-
+    w0 = w1 = 0.33
+    w2 = 1-(w0+w1)
+        
+    mu0 = np.array([30,30,30])
+    mu1 = np.array([-20,-20,-20])
+    mu2 = np.array([15,-15,15])
+        
+    disp0 = np.array([25,23,27])
+    disp1 = np.array([13,17,15])
+    disp2 = np.array([9,14,12])
+    
+    w_sample = np.random.random_sample(N)
+    
     psx = (np.random.rand(N)*(xmax-xmin)+xmin)*u.pc
     psy = (np.random.rand(N)*(ymax-ymin)+ymin)*u.pc
     psz = (np.random.rand(N)*(zmax-zmin)+zmin)*u.pc
-
-    scale = np.random.randn(N,3)
-    psvels = v0 + scale*disp0
-
+    
+    from_g0 = np.where(w_sample < w0) #We get the indices of the stars that belong to the first Gaussian
+    from_g1 = np.where((w0 <= w_sample) & (w_sample < (w0+w1)))
+    from_g2 = np.where(w_sample > (1-w2))
+    
+    scale0 = np.random.randn(len(from_g0[0]),3)
+    scale1 = np.random.randn(len(from_g1[0]),3)
+    scale2 = np.random.randn(len(from_g2[0]),3)
+    
+    psvels = np.zeros((N,3))
+    
+    psvels[from_g0] = mu0+scale0*disp0 #We exchange our empty velocity values with the ones obtained from each Gaussian
+    psvels[from_g1] = mu1+scale1*disp1
+    psvels[from_g2] = mu2+scale2*disp2
+    
     psvx, psvy, psvz = psvels.T
-
+    
     #We use Astropy's coord class which makes it easy to keep track of units and conversions
-
+    
     psample = coord.Galactic(u=psx,v=psy,w=psz,U=psvx*(u.km/u.s),
-                             V=psvy*(u.km/u.s),W=psvz*(u.km/u.s),representation_type=coord.CartesianRepresentation,differential_type=coord.CartesianDifferential)
-
+                            V=psvy*(u.km/u.s),W=psvz*(u.km/u.s),representation_type=coord.CartesianRepresentation,differential_type=coord.CartesianDifferential)
+    
     psample.set_representation_cls(coord.SphericalRepresentation,coord.SphericalCosLatDifferential)
-
+    
     return psample
 
 def calc_K(pk,rhat,vmin,dv,n):
@@ -450,16 +476,16 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,phi0_guess = [],v0_guess=[],disp_g
 
     return mxlnew, phi_all
 
-def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
-
+def opt_alpha(alpha0,M,N,sample,vmin,dv,n,tol=0.01):
+    
     """Function that finds the optimal value of alpha for a given sample of stars.
     Given an initial guess of alpha, alpha0, it will draw M samples of size N from the resulting
     distribution f(v) computed using max_L. For each sample we perform the maximisation scheme
     to find the f(v) distribution for a set of alpha values. The mean integrated square error (MISE) is then
     computed for each alpha value and the alpha with the lowest MISE, alpha_opt is then our new initial guess.
-
+    
     This process repeats until the difference |alpha0-alpha_opt| falls below a certain threshold.
-
+    
     alpha0: The initial guess of alpha
     M: The number of samples to compute the MISE for
     N: Number of stars in each sample
@@ -469,10 +495,19 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
     dv: The dims of each cell
     n: The dims of our box
     tol: The desired logarithmic tolerance for the minimisation scheme. Default value is 0.01.
-
+    
     """
-
-
+    
+    pvals, rhatvals = calc_p_rhat(sample)
+    
+    #We want to compute the rhat values for every sample
+    #So we just draw M sets of size N of the coordinates from the original
+    #sample that we will use for each iteration of the sample.
+    
+    sample.set_representation_cls(coord.CartesianRepresentation)
+    cartcoords = np.array([sample.u,sample.v,sample.w]).T
+    coordinds = np.linspace(0,len(cartcoords)-1,len(cartcoords))
+    
     diff = 1
     s = 0
 
@@ -510,6 +545,9 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
         prob = np.ravel(fv0/fv0s) #The normalised probability
 
         smp = np.random.choice(rrind,(M,N),p=prob) #Creation of M samples of size n given f(v)
+        smpcoordinds = np.random.choice(coordinds,(M,N)).astype(int) #We also draw random positions for these stars
+
+        smpcoords = cartcoords[smpcoordinds]
 
         smpx, smpy, smpz = np.asarray(np.unravel_index(smp,(nx,ny,nz)))
 
@@ -517,17 +555,29 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
         vyvals = vyy[smpx,smpy,smpz].T
         vzvals = vzz[smpx,smpy,smpz].T
 
-        smpvals = np.asarray([vxvals, vyvals, vzvals]).T
+        smpvels = np.asarray([vxvals, vyvals, vzvals]).T
 
         ise = np.zeros((M,len(logalphavals))) #container for the integrated square errors
 
         for i in range(M):
+            
+            smpvx, smpvy, smpvz = smpvels[i].T #For every pseudosample we get velocities
+            
+            coordx, coordy, coordz = smpcoords[i].T#... as well as coordinates
+            
+            psample = coord.Galactic(u=coordx*u.pc,v=coordy*u.pc,w=coordz*u.pc,U=smpvx*(u.km/u.s),
+                            V=smpvy*(u.km/u.s),W=smpvz*(u.km/u.s),representation_type=coord.CartesianRepresentation,
+                            differential_type=coord.CartesianDifferential)
+    
+            psample.set_representation_cls(coord.SphericalRepresentation,coord.SphericalCosLatDifferential)
+            
+            pspvals, psrhatvals = calc_p_rhat(psample)
 
             for j in range(len(logalphavals)):
 
                 alpha = 10**(logalphavals[j])
 
-                phi, phiall = max_L(alpha, smpvals[i], rhatvals, vmin, dv, n, disp=0)
+                phi, phiall = max_L(alpha, pspvals, psrhatvals, vmin, dv, n, disp=0)
 
                 fv = np.exp(phi)
 
@@ -544,7 +594,7 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
         diff = abs(logalpha0 - logalpha_opt)
 
         logalpha0 = logalpha_opt #We set the optimised alpha value to be our new initial guess
-
+        
         """Since our initial guess is very broad and covers 10 orders of magnitude, we have to narrow it down.
         This is done by taking the alpha values to the right and left of our optimal value to define the new range.
         If the optimal value is at the edges of our array, then we take the missing upper or lower bound
@@ -568,5 +618,5 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
 
     print('It took',s,'iterations')
     print('The optimal value for alpha is',alpha_fin)
-
+    
     return

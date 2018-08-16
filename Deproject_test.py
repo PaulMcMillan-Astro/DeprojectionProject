@@ -1,4 +1,4 @@
-from Deproject_v1 import *
+from Deproject_v1_0 import *
 import numpy as np
 
 def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
