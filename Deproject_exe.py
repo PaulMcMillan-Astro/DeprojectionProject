@@ -1,11 +1,20 @@
 from Deproject_v1 import *
 from sys import argv
 import os
-
 import time
+
+"""Script that when called by Python in terminal will perform the computations needed
+to run a maximisation scheme. It will also allow you to plot the results and the 
+change in L over all iterations. 
+
+If provided the file 'vars.ini' as an argument such that the terminal command is
+'python Deproject_exe.py vars.ini' it will read the input variables automatically"""
+
+##########You will need to change the directory path to your data#################
+
 start_time = time.time()
 
-def process_input(file_):
+def process_input(file_): #Function that reads the input file if any
     h_file = []
     input_ = open(file_, 'r')
     for line in input_:
@@ -17,6 +26,10 @@ def process_input(file_):
             h_file.append(line.split('\t'))
     return h_file
         
+#Next we check if there's an input file
+#If there is, we proceed, otherwise one can enter pseudo or data
+#to manually input the parameters necessary
+
 while True:
     data_list = ['data','pseudo']
     try:
@@ -34,24 +47,12 @@ while True:
         whatdata = 'pseudo'
         break
 
+#Depending on which type of sample we want to use, we either read a fits file
+#automatically or provide inputs manually
+
 if whatdata == 'data':
-    data_raw = ascii.read(input('Enter name of data file: '), format='fast_csv')
     
-    RA = data_raw['RAdeg']*u.degree
-    DEC = data_raw['DEdeg']*u.degree
-    pm_RA = data_raw['pmRA_TGAS']*u.mas/u.yr
-    pm_DEC = data_raw['pmDE_TGAS']*u.mas/u.yr
-    parallax = data_raw['parallax']*u.mas
-    
-    dist = parallax.to(u.kpc,equivalencies=u.parallax())
-    
-    near_stars = np.where(dist.value<0.1)
-    
-    sample_raw = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
-    
-    sample = sample_raw[near_stars]
-    
-    sample = sample.transform_to(coord.Galactic)
+    data_raw = Table.read(input('Enter name of data file: '))
     
 elif whatdata == 'pseudo':
     
@@ -61,10 +62,6 @@ elif whatdata == 'pseudo':
         except (IndexError,NameError):
             try:
                 N = int(input('Enter number of stars: ')) #Number of stars we want to use in our sample
-                v0_str = input('Enter values for mux, muy, muz: ').split(',')
-                v0 = np.array([int(i) for i in v0_str])
-                vdisp_str = input('Enter values for sigmax, sigmay, sigmaz: ').split(',')
-                v_disp = np.array([int(i) for i in vdisp_str])
                 n_str = input('Enter # of bins in vx, vy, vz: ').split(',')
                 n = np.array([int(i) for i in n_str])
                 dv_str = input('Enter length of bins in vx, vy, vz: ').split(',')
@@ -82,26 +79,30 @@ elif whatdata == 'pseudo':
             else:
                 break
         else:
-            guessfile = argv[1]
+            guessfile = argv[1] #The vars.ini file
             vars_ = process_input(guessfile)
             N = int(vars_[0][0])
-            v0 = np.array(vars_[1][0].split(',')[:],dtype=float)
-            v_disp = np.array(vars_[2][0].split(',')[:],dtype=float)
-            n = np.array(vars_[3][0].split(',')[:],dtype=int)
-            vmin = np.array(vars_[4][0].split(',')[:],dtype=float)
-            dv = np.array(vars_[5][0].split(',')[:],dtype=float)
-            v_guess = np.array(vars_[6][0].split(',')[:],dtype=float)
-            disp_guess = np.array(vars_[7][0].split(',')[:],dtype=float)
-            alpha = float(vars_[8][0])
-            datafile = vars_[9][0].rstrip('\n')
+            n = np.array(vars_[1][0].split(',')[:],dtype=int)
+            vmin = np.array(vars_[2][0].split(',')[:],dtype=float)
+            dv = np.array(vars_[3][0].split(',')[:],dtype=float)
+            v_guess = np.array(vars_[4][0].split(',')[:],dtype=float)
+            disp_guess = np.array(vars_[5][0].split(',')[:],dtype=float)
+            alpha = float(vars_[6][0])
+            datafile = vars_[7][0].rstrip('\n')
             break
         
-    if len(datafile) != 0:
-        os.chdir("/home/jooehn/Documents/Summer project/GDR2 data")
-
-
-        data_raw = Table.read(str(datafile))
+    if any([len(datafile) != 0,whatdata == 'data']):
         
+        try:
+            data_raw
+        except NameError:
+            
+            try:
+                os.chdir("/home/jooehn/Documents/Summer project/GDR2 data")
+            except FileNotFoundError:
+                print('Edit your desired path in the script')
+            data_raw = Table.read(str(datafile))
+            pass
         
         try:
             RA = data_raw['ra']
@@ -160,8 +161,6 @@ elif whatdata == 'pseudo':
         sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
         
         sample_raw = sample_icrs.transform_to(coord.Galactic)
-        
-        idx = None #residual from previous code that I am too lazy to fix 
             
         chinu_raw = np.stack((np.exp(-0.4*(G_mean.value-19.5)), np.ones((G_mean.shape))),axis = 0)
         
@@ -170,11 +169,11 @@ elif whatdata == 'pseudo':
         """Next we perform the standard cuts which are provided in Appendix B of the Observational HR-Diagram paper of
             Gaia Collaboration et al (2018)"""
     
-        standard_cuts = [parallax_over_error[idx]<10,visibility_periods_used[idx]<8,phot_g_mean_flux_over_error[idx]<50,\
-                   phot_rp_mean_flux_over_error[idx]<20,phot_bp_mean_flux_over_error[idx]<20,\
-                   phot_bp_rp_excess_factor[idx] > 1.3+0.06*(phot_bp_mean_mag[idx]-phot_rp_mean_mag[idx])**2,\
-                   phot_bp_rp_excess_factor[idx] < 1.0+0.015*(phot_bp_mean_mag[idx]-phot_rp_mean_mag[idx])**2,\
-                   astrometric_chi2_al[idx]/(astrometric_n_good_obs_al[idx]-5)>(1.44*np.amax(chinu,axis=0)).reshape((len(sample_raw)))]
+        standard_cuts = [parallax_over_error<10,visibility_periods_used<8,phot_g_mean_flux_over_error<50,\
+                   phot_rp_mean_flux_over_error<20,phot_bp_mean_flux_over_error<20,\
+                   phot_bp_rp_excess_factor>1.3+0.06*(phot_bp_mean_mag-phot_rp_mean_mag)**2,\
+                   phot_bp_rp_excess_factor<1.0+0.015*(phot_bp_mean_mag-phot_rp_mean_mag)**2,\
+                   astrometric_chi2_al/(astrometric_n_good_obs_al-5)>(1.44*np.amax(chinu,axis=0)).reshape((len(sample_raw)))]
 
         cut_list = standard_cuts
         
@@ -184,13 +183,12 @@ elif whatdata == 'pseudo':
         
         bad_idx_arr1 = bad_idx_arr.reshape((len(bad_idx_arr)))
     
-        nan_idx = np.concatenate([np.ravel(np.argwhere(np.isnan(G_mean_raw[idx]))),np.ravel(np.argwhere(np.isnan(BP_RP_raw[idx])))]) 
+        nan_idx = np.concatenate([np.ravel(np.argwhere(np.isnan(G_mean_raw))),np.ravel(np.argwhere(np.isnan(BP_RP_raw)))]) 
         nanvals = np.unique(nan_idx)
     
         bad_idx_arr2 = np.concatenate([bad_idx_arr1,nanvals])
     
         bad_idx = np.unique(bad_idx_arr2)
-        # bad_idx = nanvals
     
         mask = np.full((sample_raw.shape),True)
         mask[bad_idx] = False
@@ -199,7 +197,7 @@ elif whatdata == 'pseudo':
         G_mean_new = G_mean[mask]
         BP_RP_new = BP_RP[mask]
     else:
-        sample = model_sample(N,v0,v_disp)
+        sample = model_sample(N)
     
 pvals, rhatvals = calc_p_rhat(sample)
 
@@ -225,7 +223,6 @@ if shouldiplot == 'y':
     from Deproject_plots import *
     
     plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n)
-#    plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha)
     
     s=0
     
@@ -239,3 +236,10 @@ if shouldiplot == 'y':
             continue
         else:
             break
+    
+    shouldiplotL = input('Do you want to plot the change in L during the maximisation?[y/n] ')
+    if shouldiplotL=='y':
+        plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha)
+        
+
+print('My work here is done')

@@ -54,9 +54,8 @@ def calc_p_rhat(sample):
     
     return pvals, rhatvals 
 
-def model_sample(N,v0,disp0): 
-
-     """Generates a simple model solar neighbourhood star sample in a Galactic frame of reference assuming a
+def model_sample(N):
+    """Generates a simple model solar neighbourhood star sample in a Galactic frame of reference assuming a
     velocity distribution that is a sum of three predefined Gaussians.
     
     If one wishes to use other mean velocities, change these in mu0, mu1 and mu2, while the dispersions are changed
@@ -69,16 +68,15 @@ def model_sample(N,v0,disp0):
     
     N: Number of stars in the sample"""
     
-    xmax, ymax, zmax = np.array([100,100,100]) / np.sqrt(3)
+    xmax, ymax, zmax = np.array([100,100,100])/np.sqrt(3)    
     xmin, ymin, zmin = -xmax,-ymax,-zmax
-    
     w0 = w1 = 0.33
     w2 = 1-(w0+w1)
-    
+        
     mu0 = np.array([30,30,30])
     mu1 = np.array([-20,-20,-20])
-    mu2 = np.array([15,15,15])
-    
+    mu2 = np.array([15,-15,15])
+        
     disp0 = np.array([25,23,27])
     disp1 = np.array([13,17,15])
     disp2 = np.array([9,14,12])
@@ -108,7 +106,7 @@ def model_sample(N,v0,disp0):
     #We use Astropy's coord class which makes it easy to keep track of units and conversions
     
     psample = coord.Galactic(u=psx,v=psy,w=psz,U=psvx*(u.km/u.s),
-                             V=psvy*(u.km/u.s),W=psvz*(u.km/u.s),representation_type=coord.CartesianRepresentation,differential_type=coord.CartesianDifferential)
+                            V=psvy*(u.km/u.s),W=psvz*(u.km/u.s),representation_type=coord.CartesianRepresentation,differential_type=coord.CartesianDifferential)
     
     psample.set_representation_cls(coord.SphericalRepresentation,coord.SphericalCosLatDifferential)
     
@@ -266,7 +264,9 @@ def sec_der(phi,sigma2,dv):
     
     phi_arr = phi_arrx+phi_arry+phi_arrz
     
-    phi_arr[0,:,:] = phi_arr[:,0,:] = phi_arr[:,:,0] = 0 #Due to lack of smoothness at edges, we set these values to 0
+     #Due to lack of smoothness at edges, we set these values to 0
+    
+    phi_arr[0,:,:] = phi_arr[:,0,:] = phi_arr[:,:,0] = 0
     phi_arr[-1,:,:] = phi_arr[:,-1,:] = phi_arr[:,:,-1] = 0
     
     return phi_arr
@@ -291,7 +291,7 @@ def grad_sec_der(phi,*args):
     phi_arrz = (sigma2[2]/dv2[2])*(phi_fac[2]-2*phip)
     
     """We sum all contributions from adjacent boxes and finally add the terms for each box l. 
-    Yields a box with the same dimensions as phi, containing the second derivative values for each bin."""
+    Yields a box with the same dimensions as phi, containing the third derivative values for each bin."""
     
     eta = phi_arrx+phi_arry+phi_arrz
     
@@ -447,8 +447,9 @@ def get_grad_negL(phi,*args):
 def max_L(alpha, pvals, rhatvals, vmin, dv, n,phi0_guess = [],v0_guess=[],disp_guess=[], disp=1):
     
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_negL().
-    It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
-    star sample for which the velocity distribution is to be estimated."""
+    It takes guesses of the distribution (currently only supports Gaussian guesses) 
+    and the relevant data from the star sample for which the velocity 
+    distribution is to be estimated."""
     
     dvx, dvy, dvz = dv
     nx, ny, nz = n
@@ -473,7 +474,7 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,phi0_guess = [],v0_guess=[],disp_g
     
     Kvals = scisp.coo_matrix(K0)
 
-    for i in range(1,N): #Loop that yield a sparse array of N K-values
+    for i in range(1,N): #Loop that yields a sparse array of N K-values
 
         K = np.ravel(calc_K(pvals[i],rhatvals[i],vmin,dv,n))
         K_coo = scisp.coo_matrix(K)
@@ -488,13 +489,11 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,phi0_guess = [],v0_guess=[],disp_g
     
     mxl, phi_all = fmin_cg(get_negL, phi0r, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True,disp=disp)
     
-#    mxl, phi_all = fmin_cg(get_negL, phi0r, gtol=5e-4, args=args, retall=True,disp=disp)
-    
     mxlnew = mxl.reshape(n)
 
     return mxlnew, phi_all
 
-def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
+def opt_alpha(alpha0,M,N,sample,vmin,dv,n,tol=0.01):
     
     """Function that finds the optimal value of alpha for a given sample of stars.
     Given an initial guess of alpha, alpha0, it will draw M samples of size N from the resulting
@@ -516,6 +515,15 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
     
     """
     
+    pvals, rhatvals = calc_p_rhat(sample)
+    
+    #We want to compute the rhat values for every sample
+    #So we just draw M sets of size N of the coordinates from the original
+    #sample that we will use for each iteration of the sample.
+    
+    sample.set_representation_cls(coord.CartesianRepresentation)
+    cartcoords = np.array([sample.u,sample.v,sample.w]).T
+    coordinds = np.linspace(0,len(cartcoords)-1,len(cartcoords))
     
     diff = 1
     s = 0
@@ -554,6 +562,9 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
         prob = np.ravel(fv0/fv0s) #The normalised probability
 
         smp = np.random.choice(rrind,(M,N),p=prob) #Creation of M samples of size n given f(v)
+        smpcoordinds = np.random.choice(coordinds,(M,N)).astype(int) #We also draw random positions for these stars
+
+        smpcoords = cartcoords[smpcoordinds]
 
         smpx, smpy, smpz = np.asarray(np.unravel_index(smp,(nx,ny,nz)))
 
@@ -561,17 +572,29 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
         vyvals = vyy[smpx,smpy,smpz].T
         vzvals = vzz[smpx,smpy,smpz].T
 
-        smpvals = np.asarray([vxvals, vyvals, vzvals]).T
+        smpvels = np.asarray([vxvals, vyvals, vzvals]).T
 
         ise = np.zeros((M,len(logalphavals))) #container for the integrated square errors
 
         for i in range(M):
+            
+            smpvx, smpvy, smpvz = smpvels[i].T #For every pseudosample we get velocities
+            
+            coordx, coordy, coordz = smpcoords[i].T#... as well as coordinates
+            
+            psample = coord.Galactic(u=coordx*u.pc,v=coordy*u.pc,w=coordz*u.pc,U=smpvx*(u.km/u.s),
+                            V=smpvy*(u.km/u.s),W=smpvz*(u.km/u.s),representation_type=coord.CartesianRepresentation,
+                            differential_type=coord.CartesianDifferential)
+    
+            psample.set_representation_cls(coord.SphericalRepresentation,coord.SphericalCosLatDifferential)
+            
+            pspvals, psrhatvals = calc_p_rhat(psample)
 
             for j in range(len(logalphavals)):
 
                 alpha = 10**(logalphavals[j])
 
-                phi, phiall = max_L(alpha, smpvals[i], rhatvals, vmin, dv, n, disp=0)
+                phi, phiall = max_L(alpha, pspvals, psrhatvals, vmin, dv, n, disp=0)
 
                 fv = np.exp(phi)
 
@@ -608,7 +631,7 @@ def opt_alpha(alpha0,M,N,pvals,rhatvals,vmin,dv,n,tol=0.01):
 
         s+=1
 
-    alpha_fin = 10**(logalpha0)    
+    alpha_fin = 10**(logalpha0)
 
     print('It took',s,'iterations')
     print('The optimal value for alpha is',alpha_fin)

@@ -1,8 +1,10 @@
-"""Test that for a given model sample checks if the distribution of L is smooth for a number of guesses of the dispersion."""
 from Deproject_v1 import *
 import numpy as np
 
 def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
+    
+    """Test that for a given model sample checks if the distribution of L 
+    is smooth for a number of guesses of the dispersion."""
     
     dvx, dvy, dvz = dv
     nx, ny, nz = n
@@ -26,7 +28,8 @@ def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
 
     Kvals_csc = Kvals.tocsc()
     
-    """We generate a set of sigma values for each dimension that will serve as basis for different gueses of phi"""
+    """We generate a set of sigma values for each dimension that will serve as 
+    basis for different gueses of phi"""
     
     step = 5
     
