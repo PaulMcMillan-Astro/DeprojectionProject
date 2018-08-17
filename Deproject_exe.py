@@ -102,13 +102,16 @@ elif whatdata == 'pseudo':
         except NameError:
             
             try:
-                os.chdir("/home/jooehn/Documents/Summer project/GDR2 data")
+                os.chdir("/DATA")
             except FileNotFoundError:
                 print('Edit your desired path in the script')
             data_raw = Table.read(str(datafile))
             pass
         
-        try:
+        #Unfortunately the Zenodo tables are not very well structured
+        #and have different variable names which have led to the mess below
+        
+        try:  
             RA = data_raw['ra']
             DEC = data_raw['dec']
             pm_RA = data_raw['pmra']
@@ -156,22 +159,28 @@ elif whatdata == 'pseudo':
             astrometric_chi2_al = data_raw['ASTROMETRIC_CHI2_AL']
             astrometric_n_good_obs_al = data_raw['ASTROMETRIC_N_GOOD_OBS_AL']
         
-        parallax_raw = parallax_raw.to(u.mas) #This is done to avoid having to deal with inconsitencies in units of the datasets
+        parallax_raw = parallax_raw.to(u.mas) 
+        #This is done to avoid having to deal with inconsitencies in units of the datasets
         G_mean = G_mean_raw.to(u.mag)
         BP_RP = BP_RP_raw.to(u.mag)
         
         dist = parallax_raw.to(u.kpc,equivalencies=u.parallax())
         
+        #We now just set up our data and are ready to apply cuts to it
+        
         sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
         
         sample_raw = sample_icrs.transform_to(coord.Galactic)
-            
+
+        """Next we perform the standard cuts which are provided in Appendix B of the Observational HR-Diagram paper of
+            Gaia Collaboration et al (2018)"""
+        
+        #This chinu term is part of the last term in the standard cuts of Appendix B of the HRD paper 
         chinu_raw = np.stack((np.exp(-0.4*(G_mean.value-19.5)), np.ones((G_mean.shape))),axis = 0)
         
         chinu = chinu_raw.reshape((2,len(sample_raw)))
-    
-        """Next we perform the standard cuts which are provided in Appendix B of the Observational HR-Diagram paper of
-            Gaia Collaboration et al (2018)"""
+            
+        #We obtain a list with boolean statements for our standard cuts
     
         standard_cuts = [parallax_over_error<10,visibility_periods_used<8,phot_g_mean_flux_over_error<50,\
                    phot_rp_mean_flux_over_error<20,phot_bp_mean_flux_over_error<20,\
@@ -181,19 +190,37 @@ elif whatdata == 'pseudo':
 
         cut_list = standard_cuts
         
+        additional_cuts = [] #Enter additional cuts on your data here, e.g. distance or extinction
+        
+        #Recommended cuts: [dist>0.05*u.kpc,E_BP_RP > 0.015]
+        #N.B. We remove the stars that does not fulfill these criteria
+        
+        try:
+            cut_list = np.concatenate((standard_cuts,additional_cuts))
+        except ValueError:
+            cut_list = standard_cuts
+            pass
+        
+        #We need to reshape the list of cuts for consistency with the np.argwhere command
+        #We then obtain a list with indices of the 'bad' data points
         cut_list_rs = [np.reshape(i,(len(sample_raw))) for i in cut_list]
         bad_idx_list = [np.argwhere(i) for i in cut_list_rs]
         bad_idx_arr = np.concatenate(bad_idx_list)
         
         bad_idx_arr1 = bad_idx_arr.reshape((len(bad_idx_arr)))
     
-        nan_idx = np.concatenate([np.ravel(np.argwhere(np.isnan(G_mean_raw))),np.ravel(np.argwhere(np.isnan(BP_RP_raw)))]) 
-        nanvals = np.unique(nan_idx)
+        #Uncomment the three terms below and add take the unique values of bad_idx_arr2 instead of arr_1
+        #if we want to use the data for an HRD plot
+        
+        #nan_idx = np.concatenate([np.ravel(np.argwhere(np.isnan(G_mean_raw))),np.ravel(np.argwhere(np.isnan(BP_RP_raw)))]) 
+        #nanvals = np.unique(nan_idx)
+        #bad_idx_arr2 = np.concatenate([bad_idx_arr1,nanvals])
     
-        bad_idx_arr2 = np.concatenate([bad_idx_arr1,nanvals])
+        bad_idx = np.unique(bad_idx_arr1)
     
-        bad_idx = np.unique(bad_idx_arr2)
-    
+        #We create a full array with the same shape as our raw sample that
+        #contains True in every data point. We then set the bad index data
+        #points to False and obtain a mask
         mask = np.full((sample_raw.shape),True)
         mask[bad_idx] = False
     
@@ -201,7 +228,7 @@ elif whatdata == 'pseudo':
         G_mean_new = G_mean[mask]
         BP_RP_new = BP_RP[mask]
     else:
-        sample = model_sample(N)
+        sample = model_sample(N) #... or we can just use pseudo-data instead
     
 pvals, rhatvals = calc_p_rhat(sample)
 
@@ -244,6 +271,7 @@ if shouldiplot == 'y':
     shouldiplotL = input('Do you want to plot the change in L during the maximisation?[y/n] ')
     if shouldiplotL=='y':
         plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha)
-        
+
+#Should add a way of saving the mxl data        
 
 print('My work here is done')

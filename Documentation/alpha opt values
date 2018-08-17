@@ -1,5 +1,6 @@
 #These runs are made for a set of pseudodata with mu = (0,0,0) and sigma = (50,50,50) on Deproject_v0 and v1
 #The tolerance used for the difference |alpha0-alpha_opt| is log(tol)=0.01
+#The accuracy wass just a measure by eye to see how well it smoothed the distribution of L values for different sigma
 
 N			M			n			alpha			iter			t				alpha0		Accuracy[1-5]
 
@@ -36,3 +37,7 @@ N			M			n			alpha			iter			t				alpha0		Accuracy[1-5]
 5000		20			25x25x25	3.16e-17			9			10939 s			1e-14		4
 
 5000		10			40x40x40	1.68e-17			3			3804 s			1e-14		5
+
+#########################################Enter Deproject_v1_0##############################################
+
+5000		10			60x60x60	1.93e-9				4			14372 s			1e-10		#For GDR2 25pc data
