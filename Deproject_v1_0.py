@@ -180,14 +180,15 @@ def calc_K(pk,rhat,vmin,dv,n):
 
     return K
 
-def calc_sigma2(pvals,rhat,give_vmean=False):
+def calc_sigma2(pvals,rhat,give_vmean=False,noniso=False):
 
     """Function that applies equation 12 of DB98 for a set of stars from their tangential velocities and unit vectors.
     Returns the velocity dispersion tensor.
 
     pvals: array of the pk vectors for all N stars in our sample. Should have dims (N,3)
     rhat: array of N unit vectors, one for each star
-    give_vmean: if True, returns the computed mean velocity vector value for the given sample"""
+    give_vmean: if True, returns the computed mean velocity vector value for the given sample
+    noniso: if True, we no longer assume that the sample is isotropic"""
 
     pmean = np.mean(pvals, axis=0)
 
@@ -208,10 +209,36 @@ def calc_sigma2(pvals,rhat,give_vmean=False):
     pp = pvals - np.dot(A,v_mean) #Computes p' from equation (6) in DB98
 
     pp2mean = np.mean(np.square(pp),axis=0)
+    
+    if noniso:
+        #In our main method, we rely on built-in tensor algebra functions
+        #that perform these computations for us. We set up B by computing the
+        #mean of the outer product of the peculiar tangential velocities
+        #p' with itself.
+        
+        B = np.mean(pp[:,:,None]*pp[:,None,:],axis=0)
+        
+        #Next, we use the tensordot function of numpy to obtain T for each star.
+        #We resort to a simple list comprehension operation to obtain these 
+        #values
+        
+        #We could alternatively use np.einsum here
+        T_stack = np.asarray([np.tensordot(i,i.T,axes=0) for i in A])
+        
+        T = np.mean(T_stack,axis=0)
+        
+        #With the non-singular A tensor at hand we can easily solve for D
+        #and obtain the velocity dispersion tensor
+        
+        D = np.linalg.tensorsolve(T,B,(0,2))
+        
+        sigma2 = np.diag(D)
+        
+    else:
+        
+        B = np.array([[9,-1,-1],[-1,9,-1],[-1,-1,9]])
 
-    B = np.array([[9,-1,-1],[-1,9,-1],[-1,-1,9]])
-
-    sigma2 = (3/14)*np.dot(B,pp2mean) #The velocity dispersion tensor
+        sigma2 = (3/14)*np.dot(B,pp2mean) #The velocity dispersion tensor
 
     if give_vmean == True:
 
@@ -426,7 +453,7 @@ def get_grad_negL(phi,*args):
 
     return -1*grad_L
 
-def max_L(alpha, pvals, rhatvals, vmin, dv, n,phi0_guess = [],v0_guess=[],disp_guess=[], disp=1):
+def max_L(alpha, pvals, rhatvals, vmin, dv, n,phi0_guess = [],v0_guess=[],disp_guess=[], disp=1, noniso=False):
 
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_negL().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
@@ -437,7 +464,7 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,phi0_guess = [],v0_guess=[],disp_g
 
     N = len(pvals)
 
-    sigma2, vmean = calc_sigma2(pvals,rhatvals,give_vmean=True)
+    sigma2, vmean = calc_sigma2(pvals,rhatvals,True,noniso)
 
     sigma = np.sqrt(sigma2)
 
@@ -448,6 +475,7 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,phi0_guess = [],v0_guess=[],disp_g
 
     if phi0_guess == []:
         phi0 = phi_guess(v0_guess,disp_guess,vmin,dv,n) #We obtain phi given our initial guess of the velocity distribution
+        phi0[1:-1,1:-1,1:-1] += np.random.uniform(-1,1,size=(n-2))*5
     else:
         phi0 = phi0_guess
 
