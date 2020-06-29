@@ -45,8 +45,8 @@ def calc_p_rhat(sample):
     mul = mul_obs - A*np.cos(2*l)-B
     mub = mub_obs + A*np.sin(2*l)*cosb*sinb
 
-    pvals = s*np.array([-sinl*cosb*mul - cosl*sinb*mub,
-                     cosl*cosb*mul - sinl*sinb*mub,
+    pvals = s*np.array([-sinl*mul - cosl*sinb*mub,
+                     cosl*mul - sinl*sinb*mub,
                      cosb*mub])/u.yr
 
     rhatvals = np.array([cosb*cosl, cosb*sinl, sinb]).T
@@ -70,9 +70,12 @@ def model_sample(N):
     
     xmax, ymax, zmax = np.array([100,100,100])/np.sqrt(3)    
     xmin, ymin, zmin = -xmax,-ymax,-zmax
+    #w0 = 1.
+    #w1 = 0.
     w0 = w1 = 0.33
     w2 = 1-(w0+w1)
-        
+    
+    #mu0 = np.array([0,0,0])
     mu0 = np.array([30,30,30])
     mu1 = np.array([-20,-20,-20])
     mu2 = np.array([15,-15,15])
@@ -468,7 +471,8 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n,phi0_guess = [],v0_guess=[],disp_g
 
     phi0r = np.ravel(phi0) #fmin_cg only takes one-dimensional inputs for the initial guess
 
-    mxl, phi_all = fmin_cg(get_negL, phi0r, fprime = get_grad_negL, gtol=5e-4, args=args, retall=True,disp=disp)
+    mxl, phi_all = fmin_cg(get_negL, phi0r, fprime = get_grad_negL, 
+                            gtol=5e-4, args=args, retall=True,disp=disp)
 
 #    mxl, phi_all = fmin_cg(get_negL, phi0r, gtol=5e-4, args=args, retall=True,disp=disp)
 
