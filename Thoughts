@@ -1,0 +1,14 @@
+- There was randomness from the following lines in max_L():
+        phi0 = phi_guess(v0_guess,disp_guess,vmin,dv,n) #We obtain phi given our initial guess of the velocity distribution
+        phi0[1:-1,1:-1,1:-1] += np.random.uniform(-1,1,size=(n-2))*5
+- Specifically from the second line. I commented it but I am unsure if it was essential.
+
+- In vars.ini we provide initial guesses for the velocity distributions mean and dispersion, used in the function phi_guess(). 
+  - However in opt_alpha() the initial phi0 doesn't use a guess for mean & dispersion, but uses the method from Dehnen & Binney to get the values for phi0. 
+  - Which one do we want to use in our main code? Our own guess for the mean and dispersion, or ones calculated from Dehnen & Binney?
+- I'm not sure if filt_data() in Deproject_exe.py does anything?
+- In get_negL() the third term appears to be missing a sum? Or perhaps I have misunderstood it
+
+
+- In opt_alpha, perhaps we should rethink the zooming procedure. Currently we do a log zoom of
+10 every time, perhaps the number of alphas in a zoom should be related to the difference between the best found alpha and the starting value?

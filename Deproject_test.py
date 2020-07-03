@@ -107,11 +107,29 @@ def test_L(plane, alpha, v0, disp0, pvals, rhatvals, vmin, dv, n):
     
     return
 	
-def sanity_check(pvals,rhatvals,phi,vmin,dv,n):
+def sanity_check(pvals,rhatvals,phi,vmin,dv,n,logging=False,folder=''):
     
-    """Test function that for a given pseudosample computes the Gaussian distribution and the corresponding distribution
-    found through maximization using the conjugate gradient algorithm."""
+    """Test function that compares a samples velocity dispersion tensor (sigma) and mean velocities (mu) based on Dehnen and Binney 1998 with (sigma) and (mu) from the corresponding distribution found through maximization using the conjugate gradient algorithm."""    
+    #"""Test function that for a given pseudosample computes the Gaussian distribution and the corresponding distribution found through maximization using the conjugate gradient algorithm."""
     
+    #### This part finds the dispersion and mean of the sample based on DB98
+
+    sigma2, vmean0 = calc_sigma2(pvals,rhatvals,True)
+    
+    sigma = np.sqrt(sigma2)
+    
+    # These were unnecessary
+    #phi0 = phi_guess(vmean0,sigma,vmin,dv,n)
+    #fv0 = np.exp(phi0)
+    
+    
+    """Here we make sure to multipy the probability distribution f(v) with the centre values of the velocity bins in
+    each dimension. """
+	
+    #### This part finds the dispersion and mean of the estimated f(v)
+
+    fv = np.exp(phi)
+
     dvx, dvy, dvz = dv
     nx, ny, nz = n
     vxmin, vymin, vzmin = vmin
@@ -125,18 +143,6 @@ def sanity_check(pvals,rhatvals,phi,vmin,dv,n):
     vyc = (vy_bins[1:]+vy_bins[:-1])/2
     vzc = (vz_bins[1:]+vz_bins[:-1])/2
 
-    sigma2, vmean0 = calc_sigma2(pvals,rhatvals,True)
-    
-    sigma = np.sqrt(sigma2)
-    
-    phi0 = phi_guess(vmean0,sigma,vmin,dv,n)
-    fv0 = np.exp(phi0)
-    
-    fv = np.exp(phi)
-    
-    """Here we make sure to multipy the probability distribution f(v) with the centre values of the velocity bins in
-    each dimension. """
-	
     vxmean = np.sum(vxc[:,None,None]*fv)/np.sum(fv)
     vymean = np.sum(vyc[None,:,None]*fv)/np.sum(fv) 
     vzmean = np.sum(vzc[None,None,:]*fv)/np.sum(fv)
@@ -147,13 +153,19 @@ def sanity_check(pvals,rhatvals,phi,vmin,dv,n):
     dispz = np.sum((vzc[None,None,:]**2*fv))/np.sum(fv)-vzmean**2
     disp = np.sqrt(np.array([dispx,dispy,dispz]))
     
-    table = {'Sample mean' : vmean0,
-            'Sample velocity dispersion' : sigma, 
-            'Computed mean' : vmean, 
-            'Computed velocity dispersion' : disp}
+    table = {'\nDB98 mean                  :' : vmean0,
+            'computed f(v) mean         :' : vmean, 
+            'DB98 dispersions           :' : sigma, 
+            'Computed f(v) dispersions  :' : disp}
     for i,j in table.items():
-        print('{} ===> {}'.format(i,j))
-    
+        print('{} ===> {}'.format(i,j.round(6)))
+    print('\n')
+    if logging:
+        with open('RUNS/' + folder + '/log.txt', 'a') as logfile:
+            logfile.write('\nDB98 mean                 :' + str(vmean0.round(6)))
+            logfile.write('\ncomputed f(v) mean        :' + str(vmean.round(6)))
+            logfile.write('\nDB98 dispersions          :' + str(sigma.round(6)))
+            logfile.write('\nComputed f(v) dispersions :' + str(disp.round(6)))    
     return 
 
 def grad_negL_test(phi0,pvals,rhatvals,alpha,vmin,dv,n):
@@ -203,3 +215,4 @@ def grad_negL_test(phi0,pvals,rhatvals,alpha,vmin,dv,n):
     plt.show()
     
     return frac, twonorm
+

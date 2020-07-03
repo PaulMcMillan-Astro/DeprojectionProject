@@ -2,7 +2,7 @@ from Deproject_v1_0 import *
 import matplotlib.pyplot as plt
 plt.style.use('classic')
 
-def plot_fv(phi,plane,vmin,dv,n):
+def plot_fv(phi,plane,vmin,dv,n,logging=0,folder=' '):
     
     """Function that plots the velocity distribution f(v) that corresponds to
     a given array of phi-values."""
@@ -12,6 +12,8 @@ def plot_fv(phi,plane,vmin,dv,n):
     vxmin, vymin, vzmin = vmin
     vxmax, vymax, vzmax = vxmin+nx*dvx,vymin+ny*dvy,vzmin+nz*dvz
     
+    while plane != 'xy' and plane != 'yz' and plane != 'xz':    
+        plane = input('Incorrect entry, try again! ')
     if plane == 'xy':
         axsum = 2
         n1, n2 = nx, ny
@@ -41,32 +43,36 @@ def plot_fv(phi,plane,vmin,dv,n):
     twodfv = np.sum(fv,axis=axsum)
     
     xbins = np.arange(x0,x1+dx,dx)
-    ybins = np.arange(y0,x1+dy,dy)
+    ybins = np.arange(y0,y1+dy,dy)
     
     xc = (xbins[1:]+xbins[:-1])/2
     yc = (ybins[1:]+ybins[:-1])/2
     
+    [X,Y] = np.meshgrid(xc,yc);
     fig, ax = plt.subplots(figsize=(8,6))
+
     
     ax.set_title('Contour plot of velocity distribution')
-    ax.set_xlim(-100,100)
-    ax.set_ylim(-100,100)
     ax.set_xlabel(xlab+' [km s$^{-1}$]',size='large')
     ax.set_ylabel(ylab+' [km s$^{-1}$]',size='large')
-    
-    extent = [xbins[0],xbins[-1],ybins[0],ybins[-1]]
 #    im = ax.imshow(twodfv.T,origin='lower',interpolation='bilinear',vmin=0,vmax=twodfv.max(),cmap = plt.cm.get_cmap('plasma'),extent=extent)
-    im = ax.contourf(twodfv.T,40,origin='lower',cmap = plt.cm.get_cmap('bone_r'),extent=extent,linestyles='solid')
-    ax.contour(twodfv.T,10,origin='lower',extent=extent,colors='k',linewidths=0.5)
+    
+    im = ax.contourf(X,Y,twodfv.T,40,origin='lower',cmap = plt.cm.get_cmap('bone_r'),linestyles='solid')
+    ax.contour(X,Y,twodfv.T,10,origin='lower',colors='k',linewidths=0.5)
     
     cb = plt.colorbar(im,orientation='vertical', extend='max')
     plt.setp(cb.ax.get_yticklabels(), visible=False)
     cb.set_label('Number density of stars',size='large')
     
-    plt.show()
+    if logging:
+        plt.savefig('RUNS/' + folder + '/fvplot_' + plane + '.pdf',format='pdf')
+    try:
+        autoplot
+    except NameError:
+        plt.show()
     
     return 
-def plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
+def plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha,logging,folder):
     
     """Function that plots all the values found using L_collector."""
     
@@ -80,7 +86,8 @@ def plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
     x = np.arange(0,len(L_vals),1)
     
     ax.plot(x,L_vals)
-    
+    if logging:
+        plt.savefig('RUNS/' + folder + '/Lplot' + '.pdf',format='pdf')
     plt.show()
 
     return

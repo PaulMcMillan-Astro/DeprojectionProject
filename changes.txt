@@ -1,0 +1,35 @@
+#### 07-11-2019 #### 
+DM and JW corrected opt_alpha() as it was performing the "i in range(M)" loop in the particle dimension instead of the sample dimension
+
+#### 14-11-2019 #### 
+# Start of document
+
+#### 14-11-2019 #### 
+DM changed the max_L() function calls in opt_alpha() to take the phi0 output as phi0_guess argument
+
+#### 6-5-2020 #####
+Delayed update. 
+
+1) DM has changed the calc_K() function to use a Numpy pre-allocated matrix for the Kvals when memory allows it. Otherwise uses a block method which Numpy pre-allocates as far as possible before converting to sparse and then repeating the process, in the end stacking sparse matrices.
+
+2) Commented a line in max_L() when "if phi0_guess == []" was True that added random noise to the phi guess.
+
+3) Currently opt_alpha() uses DB89 sigma & mu when calling max_L() but deprojection_exe.py uses an initial guess for sigma & mu. Added option to specify whether deprojection_exe.py should use vars.ini guess values or not in vars.ini+deprojection_exe.py.
+
+4) JW previously created a noniso version of calc_sigma2(), added option to specify noniso=1/0 (True or False) to both vars.ini and alpha_vars.ini, also became an argument for opt_alpha() and is pre-defined variable set to False in any calls to max_L()
+
+5) sanity_check() printed output clarified and commented unnecessary lines. The function also claimed to be for comparing a pseudosamples gaussian distribution from DB89 with an estimated one. Changed description to specify that we compare real data DB89 values with deprojected ones.
+
+6) Created a logfile that opt_alpha.py writes to, saving the final value and used values in alpha_vars.ini
+
+#### 7-5-2020 #####
+1) Added number of opt_alpha iteratios, fmin_cg calls and fmin_cg iterations to printed output of opt_alpha(). To do this, max_L() was modified to change its output based on which function/script is calling it.
+
+2) Made a RUNS folder to which the Deproject_exe.py scipt automatically creates a folder for a run and saves the mxl data, and the plots. Also added a logfile that Deproject_exe.py writes to, saving the folder name for a run and the values which were used in vars.ini. 
+
+3) In the above logfile, also added the printed values of sanity_check()
+
+#### 13-05-2020 ####
+
+#### 14-05-2020 ####
+- After discussing with John, determined that disp_guess + v_guess is only useful if we have an idea of what they should be, as this will create a phi0 that is closer to the real value and minimization will converge quicker.

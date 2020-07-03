@@ -1,18 +1,68 @@
-from Deproject_v1_0 import *
 from sys import argv
 import os
+os.chdir('/home/mikkola/Documents/DeprojectionProject')
+from Deproject_v1_0 import *
 import time
-
+from astropy.io.ascii import read as tableread
+from datetime import date
+import builtins
+import string
+from termcolor import colored
+from Deproject_test import sanity_check
+from Deproject_plots import plot_fv,plot_L
 """Script that when called by Python in terminal will perform the computations needed
 to run a maximisation scheme. It will also allow you to plot the results and the 
 change in L over all iterations. 
 
 If provided the file 'vars.ini' as an argument such that the terminal command is
 'python Deproject_exe.py vars.ini' it will read the input variables automatically"""
+try: 
+    in_str     = argv[0] + ' ' + argv[1] + ' ' + argv[2]
+except IndexError:
+    in_str     = argv[0] + ' ' + argv[1]
+    in_allowed = 'Deproject_exe.py vars.ini'
+else:
+    in_allowed = 'Deproject_exe.py vars.ini autoplot'
+
+if in_str != in_allowed:
+    raise NameError(colored('\nThe function can only be called as either:','red',attrs=['bold']) +
+                    colored('\nDeproject_exe.py vars.ini', 'red') + 
+                    colored('\nDeproject_exe.py vars.ini autoplot', 'red'))
+
+
+# Function that creates a non-existing folder to store output data
+def make_folder():
+    '''Function that writes a folder with name YYYY-MM-DDx where x 
+    is the first letter that is a non-existing directory'''
+    alp = string.ascii_lowercase
+    date_str = str(date.today())
+    
+    list_str = []
+    for letter in alp:
+        list_str.append(date_str + letter)
+
+    for letter1 in alp:
+        for letter2 in alp:
+            list_str.append(date_str + letter1 + letter2)
+
+    list_str = np.array(list_str)
+
+
+    os_dirs = os.popen('ls RUNS | grep "%s"' % date_str).read().split("\n")[:-1]
+    os_dirs.sort(key=lambda x: len(x))
+    os_dirs = np.array(os_dirs)
+
+    existing_dirs = np.zeros(len(list_str),dtype='<U12')
+    existing_dirs[:len(os_dirs)] = os_dirs
+
+    folder_name=list_str[list_str != existing_dirs][0]
+    os.system('mkdir RUNS/' + folder_name)
+                
+    return folder_name
+
 
 ##########You will need to change the directory path to your data#################
-
-start_time = time.time()
+ti_a = time.time()
 
 def process_input(file_): #Function that reads the input file if any
     h_file = []
@@ -26,251 +76,178 @@ def process_input(file_): #Function that reads the input file if any
             h_file.append(line.split('\t'))
     return h_file
         
-#Next we check if there's an input file
-#If there is, we proceed, otherwise one can enter pseudo or data
-#to manually input the parameters necessary
-
-while True:
-    data_list = ['data','pseudo']
-    try:
-        argv[1]
-    except (IndexError,NameError):
-        whatdata = input('Enter \"data\" for measurements or \"pseudo\" for Gaussian pseudodata: ')
-        if any(whatdata in data_list for i in data_list):
-            break
-        else:
-            raise ValueError('Not a valid input')
-    except ValueError:
-        print('Please enter \"data\" or pseudo')
-        continue
-    else:
-        whatdata = 'pseudo'
-        break
 
 #Depending on which type of sample we want to use, we either read a fits file
 #automatically or provide inputs manually
+  
+try:
+    argv[1]
+except (IndexError,NameError):
+    raise NameError("Couldn't access the input file. Are you sure you wrote it correctly?")
+else:
+    guessfile = argv[1] #The vars.ini file
+    vars_ = process_input(guessfile)
+    N = int(vars_[0][0])
+    n = np.array(vars_[1][0].split(',')[:],dtype=int)
+    vmin = np.array(vars_[2][0].split(',')[:],dtype=float)
+    dv = np.array(vars_[3][0].split(',')[:],dtype=float)
+    use_guess = bool(int(vars_[4][0]))
+    non_iso = bool(int(vars_[5][0]))
+    v_guess = np.array(vars_[6][0].split(',')[:],dtype=float)
+    disp_guess = np.array(vars_[7][0].split(',')[:],dtype=float)
+    alpha = float(vars_[8][0])
+    datafile = vars_[9][0].rstrip('\n')
+    logging = bool(int(vars_[5][0]))
+        
+if datafile=="Distances_PJM2017.csv":
+    try:
+        os.chdir("DATA/")
+    except FileNotFoundError:
+        print('Edit your desired path in the script')
+    data_raw = Table.read(str(datafile))
+    flagset = 'flag_any'
+    data_raw = filt_data(data_raw,flagset)
 
-if whatdata == 'data':
+    dist = data_raw['distance']*u.pc
+    filt = dist < 200*u.pc
+    dist = dist[filt]
     
-    data_raw = Table.read(input('Enter name of data file: '))
-    
-elif whatdata == 'pseudo':
-    
-    while True:    
-        try:
-            argv[1]
-        except (IndexError,NameError):
-            try:
-                N = int(input('Enter number of stars: ')) #Number of stars we want to use in our sample
-                n_str = input('Enter # of bins in vx, vy, vz: ').split(',')
-                n = np.array([int(i) for i in n_str])
-                dv_str = input('Enter length of bins in vx, vy, vz: ').split(',')
-                dv = np.array([int(i) for i in dv_str])
-                vguess_str = input('Enter guess for mux, muy, muz: ').split(',')
-                v_guess = np.array([int(i) for i in vguess_str])
-                dispguess_str = input('Enter guess for sigmax, sigmay, sigmaz: ').split(',')
-                disp_guess = np.array([int(i) for i in dispguess_str])
-                alpha = float(input('Enter value of alpha: '))
-                vmin = np.array([-200,-200,-200])
-                if any(len(i)!=3 for i in [v0,v_disp,v_guess,disp_guess,n]):
-                    raise ValueError
-            except ValueError:
-                print('Not a valid format. Try again')
-            else:
-                break
-        else:
-            guessfile = argv[1] #The vars.ini file
-            vars_ = process_input(guessfile)
-            N = int(vars_[0][0])
-            n = np.array(vars_[1][0].split(',')[:],dtype=int)
-            vmin = np.array(vars_[2][0].split(',')[:],dtype=float)
-            dv = np.array(vars_[3][0].split(',')[:],dtype=float)
-            v_guess = np.array(vars_[4][0].split(',')[:],dtype=float)
-            disp_guess = np.array(vars_[5][0].split(',')[:],dtype=float)
-            alpha = float(vars_[6][0])
-            try:
-                datafile = vars_[7][0].rstrip('\n')
-            except IndexError:
-                datafile = []
-                pass
-            break
-        
-    if any([len(datafile) != 0,whatdata == 'data']):
-        
-        try:
-            data_raw
-        except NameError:
-            
-            try:
-                os.chdir("/DATA")
-            except FileNotFoundError:
-                print('Edit your desired path in the script')
-            data_raw = Table.read(str(datafile))
-            pass
-        
-        #Unfortunately the Zenodo tables are not very well structured
-        #and have different variable names which have led to the mess below
-        
-        try:  
-            RA = data_raw['ra']
-            DEC = data_raw['dec']
-            pm_RA = data_raw['pmra']
-            pm_DEC = data_raw['pmdec']
-            parallax_raw = data_raw['parallax'].to(u.mas)
-        
-            G_mean_raw = data_raw['phot_g_mean_mag'].to(u.mag)
-            BP_RP_raw = data_raw['bp_rp'].to(u.mag)
-            E_BP_RP = data_raw['e_bp_min_rp_val']
-            phot_bp_mean_mag = data_raw['phot_bp_mean_mag']
-            phot_rp_mean_mag = data_raw['phot_rp_mean_mag']
-        
-        except KeyError:    
-            RA = data_raw['RA']*u.deg
-            DEC = data_raw['DEC']*u.deg
-            pm_RA = data_raw['PMRA']*u.mas/u.yr
-            pm_DEC = data_raw['PMDEC']*u.mas/u.yr
-            parallax_raw = data_raw['PARALLAX']*u.mas
-        
-            G_mean_raw = data_raw['PHOT_G_MEAN_MAG']*u.mag
-            BP_RP_raw = data_raw['BP_RP']*u.mag
-            E_BP_RP = data_raw['E_BP_MIN_RP_VAL']
-            phot_bp_mean_mag = data_raw['PHOT_BP_MEAN_MAG']
-            phot_rp_mean_mag = data_raw['PHOT_RP_MEAN_MAG']
-            pass
-        
-        #Properties used for data selection
-        
-        try:
-            parallax_over_error = data_raw['parallax_over_error']
-            phot_g_mean_flux_over_error = data_raw['phot_g_mean_flux_over_error']
-            phot_rp_mean_flux_over_error = data_raw['phot_rp_mean_flux_over_error']
-            phot_bp_mean_flux_over_error = data_raw['phot_bp_mean_flux_over_error']
-            phot_bp_rp_excess_factor = data_raw['phot_bp_rp_excess_factor']
-            visibility_periods_used = data_raw['visibility_periods_used']
-            astrometric_chi2_al = data_raw['astrometric_chi2_al']
-            astrometric_n_good_obs_al = data_raw['astrometric_n_good_obs_al']
-        except KeyError:
-            parallax_over_error = data_raw['PARALLAX_OVER_ERROR']
-            phot_g_mean_flux_over_error = data_raw['PHOT_G_MEAN_FLUX_OVER_ERROR']
-            phot_rp_mean_flux_over_error = data_raw['PHOT_RP_MEAN_FLUX_OVER_ERROR']
-            phot_bp_mean_flux_over_error = data_raw['PHOT_BP_MEAN_FLUX_OVER_ERROR']
-            phot_bp_rp_excess_factor = data_raw['PHOT_BP_RP_EXCESS_FACTOR']
-            visibility_periods_used = data_raw['VISIBILITY_PERIODS_USED']
-            astrometric_chi2_al = data_raw['ASTROMETRIC_CHI2_AL']
-            astrometric_n_good_obs_al = data_raw['ASTROMETRIC_N_GOOD_OBS_AL']
-        
-        parallax_raw = parallax_raw.to(u.mas) 
-        #This is done to avoid having to deal with inconsitencies in units of the datasets
-        G_mean = G_mean_raw.to(u.mag)
-        BP_RP = BP_RP_raw.to(u.mag)
-        
-        dist = parallax_raw.to(u.kpc,equivalencies=u.parallax())
-        
-        #We now just set up our data and are ready to apply cuts to it
-        
-        sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
-        
-        sample_raw = sample_icrs.transform_to(coord.Galactic)
+    RA = (data_raw['RAdeg']*u.degree)[filt]
+    DEC = (data_raw['DEdeg']*u.degree)[filt]
+    plx = (data_raw['parallax']*u.mas)[filt]
+    pm_RA = (data_raw['pmRA_TGAS']*u.mas/u.yr)[filt]
+    pm_DEC = (data_raw['pmDE_TGAS']*u.mas/u.yr)[filt]
 
-        """Next we perform the standard cuts which are provided in Appendix B of the Observational HR-Diagram paper of
-            Gaia Collaboration et al (2018)"""
-        
-        #This chinu term is part of the last term in the standard cuts of Appendix B of the HRD paper 
-        chinu_raw = np.stack((np.exp(-0.4*(G_mean.value-19.5)), np.ones((G_mean.shape))),axis = 0)
-        
-        chinu = chinu_raw.reshape((2,len(sample_raw)))
-            
-        #We obtain a list with boolean statements for our standard cuts
-    
-        standard_cuts = [parallax_over_error<10,visibility_periods_used<8,phot_g_mean_flux_over_error<50,\
-                   phot_rp_mean_flux_over_error<20,phot_bp_mean_flux_over_error<20,\
-                   phot_bp_rp_excess_factor>1.3+0.06*(phot_bp_mean_mag-phot_rp_mean_mag)**2,\
-                   phot_bp_rp_excess_factor<1.0+0.015*(phot_bp_mean_mag-phot_rp_mean_mag)**2,\
-                   astrometric_chi2_al/(astrometric_n_good_obs_al-5)>(1.44*np.amax(chinu,axis=0)).reshape((len(sample_raw)))]
 
-        cut_list = standard_cuts
-        
-        additional_cuts = [] #Enter additional cuts on your data here, e.g. distance or extinction
-        
-        #Recommended cuts: [dist>0.05*u.kpc,E_BP_RP > 0.015]
-        #N.B. We remove the stars that does not fulfill these criteria
-        
-        try:
-            cut_list = np.concatenate((standard_cuts,additional_cuts))
-        except ValueError:
-            cut_list = standard_cuts
-            pass
-        
-        #We need to reshape the list of cuts for consistency with the np.argwhere command
-        #We then obtain a list with indices of the 'bad' data points
-        cut_list_rs = [np.reshape(i,(len(sample_raw))) for i in cut_list]
-        bad_idx_list = [np.argwhere(i) for i in cut_list_rs]
-        bad_idx_arr = np.concatenate(bad_idx_list)
-        
-        bad_idx_arr1 = bad_idx_arr.reshape((len(bad_idx_arr)))
+    filt_data(data_raw,flagset)
+
+
+
+    #We now just set up our data and are ready to apply cuts to it
+
+    sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
+
+    sample = sample_icrs.transform_to(coord.Galactic)
     
-        #Uncomment the three terms below and add take the unique values of bad_idx_arr2 instead of arr_1
-        #if we want to use the data for an HRD plot
-        
-        #nan_idx = np.concatenate([np.ravel(np.argwhere(np.isnan(G_mean_raw))),np.ravel(np.argwhere(np.isnan(BP_RP_raw)))]) 
-        #nanvals = np.unique(nan_idx)
-        #bad_idx_arr2 = np.concatenate([bad_idx_arr1,nanvals])
-    
-        bad_idx = np.unique(bad_idx_arr1)
-    
-        #We create a full array with the same shape as our raw sample that
-        #contains True in every data point. We then set the bad index data
-        #points to False and obtain a mask
-        mask = np.full((sample_raw.shape),True)
-        mask[bad_idx] = False
-    
-        sample = sample_raw[mask]
-        G_mean_new = G_mean[mask]
-        BP_RP_new = BP_RP[mask]
-    else:
-        sample = model_sample(N) #... or we can just use pseudo-data instead
-    
+elif datafile[-5:] == 'table':
+    try:
+        os.chdir("DATA/")
+    except FileNotFoundError:
+        print('Edit your desired path in the script')
+    data_raw = tableread(str(datafile))
+
+    dist = 1000/data_raw['parallax']*u.pc        
+    RA = (data_raw['ra']*u.degree)
+    DEC = (data_raw['dec']*u.degree)
+    plx = (data_raw['parallax']*u.mas)
+    pm_RA = (data_raw['pmra']*u.mas/u.yr)
+    pm_DEC = (data_raw['pmdec']*u.mas/u.yr)
+    print("Sample has " + str(len(dist)) + " stars")
+
+
+
+    sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
+
+    sample = sample_icrs.transform_to(coord.Galactic)
+
+
 pvals, rhatvals = calc_p_rhat(sample)
 
-mxl, phi_all = max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=v_guess, disp_guess=disp_guess)
+if use_guess:
+    mxl, phi_all, fmin_it = max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=v_guess, disp_guess=disp_guess, noniso=non_iso)
+elif not use_guess:
+    mxl, phi_all, fmin_it = max_L(alpha, pvals, rhatvals, vmin, dv, n, noniso=non_iso)
+    
+tf_a = time.time()
+endtime = tf_a - ti_a
+print("\nThe run took", endtime, 's: a')
 
-print("The run took", time.time() - start_time, 's')
 
-sane = input('Do you want to perform a sanity check [y/n]? ')
+if logging:
+    # Create a folder for the run and save mxl data
+    os.chdir('/home/mikkola/Documents/DeprojectionProject')
+    folder = make_folder()
+    np.save('RUNS/' + folder + '/mxl_data',mxl)
+    
+    # Save output
+    # RUNS folder identifier
+    with open('logs/log_dir_identifier.txt', 'a') as logfile:
+        if folder[10] == 'a' and len(folder) == 11:
+            mark = '='
+            logfile.write('\n' + mark*120 + '\n')
+            logfile.write(mark*55 + folder[:10] + mark*55 + '\n')
+            logfile.write(mark*120 + '\n')
+            
+        logfile.write('\nFolder name : ' + folder + '\n')
+        logfile.write('Datafile    : ' + datafile + '\n')
+        logfile.write('fmin its    : ' + str(fmin_it) + '\n')
+        logfile.write('Time needed : ' + str(endtime/60) + ' mins\n')
+        
+    # Logfile in RUNS folder 
+    with open('RUNS/' + folder + '/log.txt', 'a') as logfile:
+        logfile.write('Datafile    : ' + datafile + '\n')
+        logfile.write('fmin its    :' + str(fmin_it) + '\n')
+        logfile.write('Time needed : ' + str(endtime/60) + ' mins\n')
+        logfile.write('Labels      : Nbins[1x3], vmin[1x3], bin size, use_guess, noniso, mu_guess, sigma_guess, alpha\n')    
+        value_string=str((str(list(n)).replace(",",":").replace(":",""),str(list(vmin)).replace(",",":").replace(":","")
+                          ,str(list(dv)).replace(",",":").replace(":",""),use_guess,non_iso,str(list(v_guess)).replace(",",":").replace(":","")
+                          , str(list(disp_guess)).replace(",",":").replace(":",""), alpha)).replace("'","")[1:-1]
+        
+        logfile.write("Values      : " + value_string + '\n')
+        
+    # MORE IS SAVE BY SANITY_CHECK()
+        
+builtins.autoplot = argv[2]
 
-if sane == 'y':
+if argv[2] != 'autoplot':
+    sane = input('Do you want to perform a sanity check [y/n]? ')
+    while sane != 'y' and sane != 'n':   
+        sane = input('Incorrect entry, try again [y/n]! ')
     
-    from Deproject_test import sanity_check
+    if sane == 'y':
+        
+        from Deproject_test import sanity_check
+        
+        sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
     
-    print(sanity_check(pvals,rhatvals,mxl,vmin,dv,n))
-
-elif sane == 'n':
+    elif sane == 'n':
+        
+        print('Suit yourself')
+        
+    shouldiplot = input('Do you want to plot your results [y/n]? ')
+    while shouldiplot != 'y' and shouldiplot != 'n':   
+        shouldiplot = input('Incorrect entry, try again [y/n]! ')
     
-    print('Suit yourself')
+    if shouldiplot == 'y':
+        from Deproject_plots import plot_fv,plot_L
+        
+        plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n,logging,folder)
+        
+        s=0
+        
+        while True:
+            if s==2:
+                break
+            plotagain = input('Do you want to plot another plane [y/n]? ')
+            if plotagain == 'y':
+                plot_fv(mxl,input('What plane should I project onto [xy/yz/xz]? '),vmin,dv,n,logging,folder)
+                s+=1
+                continue
+            else:
+                break
     
-shouldiplot = input('Do you want to plot your results?[y/n] ')
-
-if shouldiplot == 'y':
-    from Deproject_plots import *
+    shouldiplotL = input('Do you want to plot the change in L during the maximisation [y/n]? ')
+    while shouldiplotL != 'y' and shouldiplotL != 'n':   
+        shouldiplotL = input('Incorrect entry, try again [y/n]! ')
     
-    plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n)
-    
-    s=0
-    
-    while True:
-        if s==2:
-            break
-        plotagain = input('Do you want to plot another plane?[y/n] ')
-        if plotagain == 'y':
-            plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n)
-            s+=1
-            continue
-        else:
-            break
-    
-    shouldiplotL = input('Do you want to plot the change in L during the maximisation?[y/n] ')
     if shouldiplotL=='y':
-        plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha)
+        plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha,logging,folder)
+        
+else:
+    sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
+    plot_fv(mxl,'xy',vmin,dv,n,logging,folder)
+    plot_fv(mxl,'yz',vmin,dv,n,logging,folder)
+    plot_fv(mxl,'xz',vmin,dv,n,logging,folder)
 
 #Should add a way of saving the mxl data        
 
