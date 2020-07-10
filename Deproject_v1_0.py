@@ -16,8 +16,21 @@ from datetime import date
 import time
 from decimal import Decimal
 from alpha_debugger import *
+from IPython.display import clear_output
 
-
+def save_var(var,varname):
+    cd = os.getcwd()
+    os.chdir('/home/mikkola/Documents/DeprojectionProject')
+    if 'JPY_PARENT_PID' in os.environ:
+        origin = 'jup'
+    else:
+        origin = 'term'
+    i = 1
+    while varname+'_'+origin+str(i)+'.npy' in os.listdir(origin):
+        i+=1
+        
+    np.save(origin+'/'+varname+'_'+origin+str(i), var)
+    os.chdir(cd)
 # Version adjusted by Paul to fix the edge issues with the gradient
 def make_treefile():
     '''Function that creates a .txt file with name YYYY-MM-DDx where x is the
@@ -111,7 +124,7 @@ def model_sample(N):
     
     The stars have distances from the Sun that are in the range [10,100] pc.
     
-    Takes the following arugments:
+    Takes the following arguments:
     
     N: Number of stars in the sample"""
 
@@ -153,8 +166,9 @@ def model_sample(N):
     psvels[from_g2] = mu2 + scale2 * disp2
 
     psvx, psvy, psvz = psvels.T
-
     # We use Astropy's coord class which makes it easy to keep track of units and conversions
+
+    return psx, psy, psz, psvx, psvy, psvz
 
     psample = coord.Galactic(u=psx, v=psy, w=psz, U=psvx * (u.km / u.s),
                              V=psvy * (u.km / u.s), W=psvz * (u.km / u.s),
@@ -438,7 +452,7 @@ def get_negL(phi, *args):
 
     alpha: Smoothing parameter that can be found using the function opt_alpha
     """
-
+    
     Kvals, N, alpha, dv, n, sigma2 = args
     nx, ny, nz = n
     dvx, dvy, dvz = dv
@@ -465,11 +479,9 @@ def get_negL(phi, *args):
 
     Kphi_sumlog = np.log(Kphi_sum[Kphi_sum != 0])  # To make sure we don't get infinities
     Kphi_sum_tot = np.sum(Kphi_sumlog)  # Gives the double sum in the first term
-
     L_tilde = Kphi_sum_tot / N - exphi_csc.sum() - ((alpha * dvx * dvy * dvz) / 2) * phixhi_sum  # eq. 31 in DB98
-
+        
     negL = -1 * L_tilde  # Since we want to maximize L_tilde, we should minimize -L_tilde
-
     return negL
 
 
@@ -519,36 +531,47 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_negL().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
     star sample for which the velocity distribution is to be estimated."""
-    
-    # Here we find out where max_L() was called:
-    curframe = inspect.currentframe()
-    calframe = inspect.getouterframes(curframe, 2)
-    callername = calframe[1][3]
-    if callername[:9] != 'opt_alpha' and callername != '<module>':
-        raise Exception(callername)
-        
     dvx, dvy, dvz = dv
     nx, ny, nz = n
-
     N = len(pvals)
-
+    
     sigma2, vmean = calc_sigma2(pvals, rhatvals, True, noniso=noniso)
-
     if v0_guess == []:
         v0_guess = vmean
     if disp_guess == []:
         sigma = np.sqrt(sigma2)
         disp_guess = sigma
-
     if phi0_guess == []:
-        phi0 = phi_guess(v0_guess, disp_guess, vmin, dv,
-                         n)  # We obtain phi given our initial guess of the velocity distribution
-
-        # Use this if your input data is from a Gaussian
-        # phi0[1:-1,1:-1,1:-1] += np.random.uniform(-1,1,size=(n-2))*5
+        phi0 = phi_guess(v0_guess, disp_guess, vmin, dv,n)
     else:
         phi0 = phi0_guess
+        
+    Kvals_args = (pvals, rhatvals, vmin, dv, n, N)
+    Kvals, callername = Kvals_function_selector(Kvals_args)
 
+    args = (Kvals, N, alpha, dv, n, sigma2)
+    phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
+    if callername == '<module>':
+        print('Started fmin_cg...')
+    mxl, phi_all = fmin_cg(get_negL, phi0r, fprime=get_grad_negL, gtol=1e-4, args=args, retall=True, disp=disp)
+    
+    fmin_it = np.shape(phi_all)[0] - 1
+    mxlnew = mxl.reshape(n)
+    return mxlnew, phi_all, fmin_it
+
+
+def Kvals_function_selector(args):
+    """This function determines if Kvals can be calculated using a faster numpy pre-allocation method or if it
+    requires a block-step method based on the system. Designed only for a 12GB MacBook Pro or Celeste."""
+    # Here we find out where max_L() was called:
+    curframe = inspect.currentframe()
+    calframe = inspect.getouterframes(curframe, 2)
+    callername = calframe[2][3]
+    if callername[:9] != 'opt_alpha' and callername != '<module>':
+        raise Exception(callername)
+    
+    pvals, rhatvals, vmin, dv, n, N = args
+    
     system = os.popen('uname').read()[:-1]
     if system == 'Darwin':
         MaxMem = 1.2e10  # Assign 12 GB of RAM on MacBook Pro
@@ -559,29 +582,26 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
             "Invalid system name, can only run with 'Darwin' or 'Linux'. run uname in terminal and compare!")
 
     MaxFloats = MaxMem / 8  # Number of floats we can handle assuming 8 bytes per float
-    Nblock = int(np.floor(MaxFloats / (nx * ny * nz)))  # Largest possible block size
+    Nblock = int(np.floor(MaxFloats / np.prod(n)))  # Largest possible block size
     if callername == '<module>':
-        print('Block size is ' + str(Nblock))
+        print('Run requires: ' + str(N*np.prod(n)/1e9) + ' GB (' + str(MaxMem/1e9) + ' GB available) | Block size = ' + str(Nblock))
 
     if Nblock > N:
         if callername == '<module>':
-            print('Memory restriction allows faster Numpy approach, using that instead.\n')
-        Kvals = KvalsNumpyMethod(pvals, rhatvals, vmin, dv, n)
+            print('Fast Numpy Kvals run possible, running...\n')
+            Kvals = KvalsNumpyMethod(pvals, rhatvals, vmin, dv, n)
+            print('Finished kvals.\n')
+        else:
+            Kvals = KvalsNumpyMethod(pvals, rhatvals, vmin, dv, n)
     else:
         if callername == '<module>':
-            print('Due to memory restriction, will use Block approach instead of Numpy.\n')
-        Kvals = KvalsBlockMethod(pvals, rhatvals, vmin, dv, n, Nblock)
+            print('Slightly slower Block Kvals run needed, running...\n')
+            Kvals = KvalsBlockMethod(pvals, rhatvals, vmin, dv, n, Nblock)
+            print('Finished kvals.\n')
+        else:
+            Kvals = KvalsBlockMethod(pvals, rhatvals, vmin, dv, n, Nblock)
 
-    args = (Kvals, N, alpha, dv, n, sigma2)
-
-    phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
-
-
-    mxl, phi_all = fmin_cg(get_negL, phi0r, fprime=get_grad_negL, gtol=1e-4, args=args, retall=True, disp=disp)
-    fmin_it = np.shape(phi_all)[0] - 1
-    mxlnew = mxl.reshape(n)
-    return mxlnew, phi_all, fmin_it
-
+    return Kvals, callername
 
 
 # @profile

@@ -14,3 +14,10 @@ __pycache__/
 DATA/
 RUNS/
 venv/
+/jup
+/term
+jup/
+term/
+/faststats/
+/.ipynb_checkpoints
+compvar.py
