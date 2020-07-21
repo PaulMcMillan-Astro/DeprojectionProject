@@ -168,8 +168,6 @@ def model_sample(N):
     psvx, psvy, psvz = psvels.T
     # We use Astropy's coord class which makes it easy to keep track of units and conversions
 
-    return psx, psy, psz, psvx, psvy, psvz
-
     psample = coord.Galactic(u=psx, v=psy, w=psz, U=psvx * (u.km / u.s),
                              V=psvy * (u.km / u.s), W=psvz * (u.km / u.s),
                              representation_type=coord.CartesianRepresentation,
@@ -177,7 +175,7 @@ def model_sample(N):
 
     psample.set_representation_cls(coord.SphericalRepresentation, coord.SphericalCosLatDifferential)
 
-    return psample
+    return psample, psvx, psvy, psvz
 
 
 # @profile
@@ -584,7 +582,7 @@ def Kvals_function_selector(args):
     MaxFloats = MaxMem / 8  # Number of floats we can handle assuming 8 bytes per float
     Nblock = int(np.floor(MaxFloats / np.prod(n)))  # Largest possible block size
     if callername == '<module>':
-        print('Run requires: ' + str(N*np.prod(n)/1e9) + ' GB (' + str(MaxMem/1e9) + ' GB available) | Block size = ' + str(Nblock))
+        print('Run requires: ' + str(8*5000*np.prod(n)/1e9) + ' GB (' + str(MaxMem/1e9) + ' GB available) | Block size = ' + str(Nblock))
 
     if Nblock > N:
         if callername == '<module>':

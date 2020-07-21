@@ -19,3 +19,4 @@ venv/
 /faststats/
 /.ipynb_checkpoints
 compvar.py
+
