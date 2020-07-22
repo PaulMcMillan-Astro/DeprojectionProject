@@ -4,20 +4,21 @@ import pandas as pd
 import astropy.units as u
 import astropy.coordinates as coord
 import scipy.stats as st
-from astropy.table import Table
-from astropy.io import ascii
-from scipy import sparse as scisp
-from scipy.optimize import fmin_cg
 import os
 import inspect
 import string
 import builtins
-from datetime import date
 import time
+import psutil
+from astropy.table import Table
+from astropy.io import ascii
+from scipy import sparse as scisp
+from scipy.optimize import fmin_cg
+from scipy.interpolate import interpn
+from datetime import date
 from decimal import Decimal
 from alpha_debugger import *
 from IPython.display import clear_output
-import psutil
 
 def save_var(var,varname):
     cd = os.getcwd()
@@ -317,6 +318,28 @@ def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
 
         return sigma2
 
+def extrapolate_box(box):
+    '''This function takes a 3D grid box and replaces the values along the outer edges with extrapolated values
+    based on the inner box using scipy.interpolate.interpn'''
+    (nx,ny,nz) = box.shape
+
+    points = (np.arange(1,nx-1), 
+              np.arange(1,ny-1),
+              np.arange(1,nz-1))
+
+    IA = np.indices(box.shape).transpose(3,1,2,0)
+
+    xedges = np.concatenate((IA[:,0,:,:].reshape(nx**2,3), IA[:,-1,:,:].reshape(nx**2,3)), axis=0)
+    yedges = np.concatenate((IA[:,:,0,:].reshape(ny**2,3), IA[:,:,-1,:].reshape(ny**2,3)), axis=0)
+    zedges = np.concatenate((IA[0,:,:,:].reshape(nz**2,3), IA[-1,:,:,:].reshape(nz**2,3)), axis=0)
+    edge_coords = np.concatenate((xedges,yedges,zedges),axis=0)
+    edge_coords = np.unique(edge_coords,axis=0) # remove duplicate entries
+
+    I_edges = np.ones((nx,ny,nz),dtype=bool)
+    I_edges[1:-1,1:-1,1:-1] = np.zeros((nx-2,ny-2,nz-2),dtype=bool)
+    edge_vals = interpn(points, box[1:-1, 1:-1, 1:-1], edge_coords, method='linear', bounds_error=False, fill_value=None)
+    box[I_edges] = edge_vals
+    return box
 
 # @profile
 def sec_der(phi, sigma2, dv):
@@ -341,10 +364,11 @@ def sec_der(phi, sigma2, dv):
 
     nxx, nyy, nzz = nx + 2, ny + 2, nz + 2
 
-    phip = np.zeros((nxx, nyy, nzz))  # new larger box
+    phip = np.pad(phi,1)  # # pads the phi-box with a layer of zeros, phip has dimensions (nxx,nyy,nzz)
 
     phip[1:-1, 1:-1, 1:-1] = phi  # puts the phi-box in the centre of our larger box
-
+    extrapolate_box(phip) # This replaces the padded zeros with extrapolated values
+    
     """Here we compute the contributions from all the adjacent bins simultaneously.
     In every dimension we sum the phi values of box l-1 and l+1 and multiply with the relevant factor"""
     phi_fac = np.array([phip[0:nxx - 2, 1:-1, 1:-1] + phip[2:nxx, 1:-1, 1:-1],
@@ -360,9 +384,7 @@ def sec_der(phi, sigma2, dv):
 
     phi_arr = phi_arrx + phi_arry + phi_arrz
 
-    phi_arr[0, :, :] = phi_arr[:, 0, :] = phi_arr[:, :,
-                                          0] = 0  # Due to lack of smoothness at edges, we set these values to 0
-    phi_arr[-1, :, :] = phi_arr[:, -1, :] = phi_arr[:, :, -1] = 0
+    extrapolate_box(phi_arr )# Due to lack of smoothness at edges, we again simply extrapolate the solution
 
     return phi_arr
 
@@ -379,8 +401,9 @@ def grad_sec_der(phi, *args):
 
     eta = sec_der(phi, sigma2, dv)
 
-    eta_big = np.zeros((nx + 2, ny + 2, nz + 2))
-    eta_big[1:-1, 1:-1, 1:-1] = eta
+    eta_big = np.pad(eta,1)
+    extrapolate_box(eta_big)
+    
     eta_fac_rs = np.array([eta_big[0:-2, 1:-1, 1:-1] + eta_big[2:, 1:-1, 1:-1],
                            eta_big[1:-1, 0:-2, 1:-1] + eta_big[1:-1, 2:, 1:-1],
                            eta_big[1:-1, 1:-1, 0:-2] + eta_big[1:-1, 1:-1, 2:]])
@@ -390,6 +413,7 @@ def grad_sec_der(phi, *args):
     eta_arrz = (sigma2[2] / dv2[2]) * (eta_fac_rs[2] - 2 * eta)
 
     eta_arr = 2 * (eta_arrx + eta_arry + eta_arrz)
+    extrapolate_box(eta_arr)
 
     return np.ravel(eta_arr)
 

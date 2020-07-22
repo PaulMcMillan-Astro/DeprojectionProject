@@ -33,7 +33,7 @@ In the estimation of the second derivative (D98, eq. 30), we opted for an array-
 	Deproject_v0.py: Contains all the base functions necessary to run max_L
 	Deproject_plots.py: Contains all functions that plot (how about that)
 	Deproject_test.py: As you might have guessed, this script contains the test functions.
-	
+
 11/7/18: Improved the various python files by adding the ability to use an input file of the same format as vars.ini. Also added a script called alpha_tester.py which is used to plot L and check the validity of alpha values, i.e. if it maximizes for the right velocity distribution.
 
 12/7/18: Managed to greatly improve speed of max_L by rewriting some functions that used np.stack. We know instead create arrays of correct sizes and then assign values.
@@ -45,17 +45,17 @@ Thoughts 22/6/18: (We should have put minutes/plan of action from the meeting on
 Forget I said this for now - it's for way, way later.
 )
 
-#### 07-11-2019 #### 
+#### 07-11-2019 ####
 DM and JW corrected opt_alpha() as it was performing the "i in range(M)" loop in the particle dimension instead of the sample dimension
 
-#### 14-11-2019 #### 
+#### 14-11-2019 ####
 # Start of document
 
-#### 14-11-2019 #### 
+#### 14-11-2019 ####
 DM changed the max_L() function calls in opt_alpha() to take the phi0 output as phi0_guess argument
 
 #### 6-5-2020 #####
-Delayed update. 
+Delayed update.
 
 1) DM has changed the calc_K() function to use a Numpy pre-allocated matrix for the Kvals when memory allows it. Otherwise uses a block method which Numpy pre-allocates as far as possible before converting to sparse and then repeating the process, in the end stacking sparse matrices.
 
@@ -72,11 +72,20 @@ Delayed update.
 #### 7-5-2020 #####
 1) Added number of opt_alpha iteratios, fmin_cg calls and fmin_cg iterations to printed output of opt_alpha(). To do this, max_L() was modified to change its output based on which function/script is calling it.
 
-2) Made a RUNS folder to which the Deproject_exe.py scipt automatically creates a folder for a run and saves the mxl data, and the plots. Also added a logfile that Deproject_exe.py writes to, saving the folder name for a run and the values which were used in vars.ini. 
+2) Made a RUNS folder to which the Deproject_exe.py scipt automatically creates a folder for a run and saves the mxl data, and the plots. Also added a logfile that Deproject_exe.py writes to, saving the folder name for a run and the values which were used in vars.ini.
 
 3) In the above logfile, also added the printed values of sanity_check()
 
 #### 13-05-2020 ####
 
 #### 14-05-2020 ####
-- After discussing with John, determined that disp_guess + v_guess is only useful if we have an idea of what they should be, as this will create a phi0 that is closer to the real value and minimization will converge quicker.
+- After discussing with John, DM determined that disp_guess + v_guess is only useful if we have an idea of what they should be, as this will create a phi0 that is closer to the real value and minimization will converge quicker.
+
+#### 22-07-2020 ####
+1) DM Added box_extrapolate to replace edge zeroes with extrapolated values in sec_der(). Noticed the same operation occurs in grad_sec_der() so implemented the extrapolation there as well.
+
+2) DM made it so phi_guess now uses a combination of two Gaussians. This is because a single Gaussian cannot effectively be used with sec_der().
+
+3) DM changed Kvals_selector so it will now use 90% of available RAM to operate.
+
+4) DM wants to implement a multigrid approach, where phi_guess is the mxl calculated for a coarse grid and the grid is iteratively upsized. This would improve performance.
