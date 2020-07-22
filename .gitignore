@@ -2,7 +2,7 @@
 *_for_sh.py
 *_testing
 gss_struct.py
-PaulRunsSomeChecks.ipynb
+*.ipynb
 speedtest.py
 testrun*
 timecheck.py
@@ -19,4 +19,3 @@ venv/
 /faststats/
 /.ipynb_checkpoints
 compvar.py
-

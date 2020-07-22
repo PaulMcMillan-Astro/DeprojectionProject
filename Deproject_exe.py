@@ -10,7 +10,8 @@ import string
 import inspect
 from termcolor import colored
 from Deproject_test import sanity_check
-from Deproject_plots import plot_fv,plot_L
+from Deproject_plots import plot_fv, plot_L, DM_plt_prefs
+DM_plt_prefs()
 """Script that when called by Python in terminal will perform the computations needed
 to run a maximisation scheme. It will also allow you to plot the results and the 
 change in L over all iterations. 
