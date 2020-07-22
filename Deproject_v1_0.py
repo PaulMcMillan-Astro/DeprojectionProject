@@ -17,6 +17,7 @@ import time
 from decimal import Decimal
 from alpha_debugger import *
 from IPython.display import clear_output
+import psutil
 
 def save_var(var,varname):
     cd = os.getcwd()
@@ -395,11 +396,12 @@ def grad_sec_der(phi, *args):
 # @profile
 def phi_guess(v0, disp0, vmin, dv, n):
     """Provides an initial guess of the phi values in each bin given an assumed distribution f(v).
-    For now only allows for a Gaussian type guess given arrays with mean velocities and dispersions for each dimension.
+    For now only allows for a sum of two Gaussians type guess given arrays with mean velocities and 
+    dispersions for each dimension.
 
     v0: A vector containing all the mean velocity values for the Gaussian distribution
 
-    disp0: A vector with the velocity dispersions for each Gaussian in x, y, z
+    disp0: A vector with the velocity dispersions for the Gaussian in x, y, z
 
     vmin: The anchor point of our velocity space box
 
@@ -409,7 +411,8 @@ def phi_guess(v0, disp0, vmin, dv, n):
     dvx, dvy, dvz = dv
     nx, ny, nz = n
     v0x, v0y, v0z = v0
-    dispx, dispy, dispz = disp0
+    dispA = disp0
+    dispB = disp0*2
 
     vxmax, vymax, vzmax = vxmin + nx * dvx, vymin + ny * dvy, vzmin + nz * dvz
 
@@ -423,21 +426,14 @@ def phi_guess(v0, disp0, vmin, dv, n):
 
     """Given the velocities of each bin we compute the 3D Gaussian value."""
 
-    gx = st.norm(v0x,
-                 dispx)  # Gets the normal distribution for dim x given the mean velocities v0x and dispersion dispx
-    gy = st.norm(v0y, dispy)
-    gz = st.norm(v0z, dispz)
-
-    gxp = gx.logpdf(vxc)  # Computes the log of the probability of our bin values being in the Gaussian
-    gyp = gy.logpdf(vyc)
-    gzp = gz.logpdf(vzc)
-
-    phi = np.meshgrid(gxp, gyp, gzp, indexing='ij')
-    # The meshgrid function couples each phi value for our 3D scenario to the relevant box
-
-    phi_sum = np.sum(phi, axis=0)  # We sum the contributions to phi from x,y,z in each box
-
-    return phi_sum
+    pos = np.stack(np.meshgrid(vxc,vyc,vzc),axis=3)
+    
+    fA = st.multivariate_normal(mean=v0, cov=np.diag(dispA**2))
+    fB = st.multivariate_normal(mean=v0, cov=np.diag(dispB**2))
+    
+    phi = np.log10((fA.pdf(pos) + fB.pdf(pos))/2)
+    
+    return phi
 
 
 # @profile
@@ -560,7 +556,8 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
 
 def Kvals_function_selector(args):
     """This function determines if Kvals can be calculated using a faster numpy pre-allocation method or if it
-    requires a block-step method based on the system. Designed only for a 12GB MacBook Pro or Celeste."""
+    requires a block-step method based on the systems available RAM. The block-step method calculates Kvals for 
+    a block on Nblock stars before making those Kvals sparse, it then proceeds with the next."""
     # Here we find out where max_L() was called:
     curframe = inspect.currentframe()
     calframe = inspect.getouterframes(curframe, 2)
@@ -570,19 +567,15 @@ def Kvals_function_selector(args):
     
     pvals, rhatvals, vmin, dv, n, N = args
     
-    system = os.popen('uname').read()[:-1]
-    if system == 'Darwin':
-        MaxMem = 1.2e10  # Assign 12 GB of RAM on MacBook Pro
-    elif system == 'Linux':
-        MaxMem = 1.2e11  # Assign 120 GB of RAM on Celeste
-    else:
-        raise Exception(
-            "Invalid system name, can only run with 'Darwin' or 'Linux'. run uname in terminal and compare!")
-
-    MaxFloats = MaxMem / 8  # Number of floats we can handle assuming 8 bytes per float
+    # We allow only 90% of the available RAM to be used to allow other processes to run simulataneously.
+    AvMem = psutil.virtual_memory().available*0.9
+    
+    MaxFloats = AvMem / 8  # Number of floats we can handle assuming 8 bytes per float
     Nblock = int(np.floor(MaxFloats / np.prod(n)))  # Largest possible block size
+    MemReq = 8*N*np.prod(n)/1e9
+    AvMem /= 1e9
     if callername == '<module>':
-        print('Run requires: ' + str(8*5000*np.prod(n)/1e9) + ' GB (' + str(MaxMem/1e9) + ' GB available) | Block size = ' + str(Nblock))
+        print('Allocated RAM: %.2f GB  \nRequired RAM : %.2f GB | Block size = %s' % (AvMem, MemReq, Nblock))
 
     if Nblock > N:
         if callername == '<module>':
