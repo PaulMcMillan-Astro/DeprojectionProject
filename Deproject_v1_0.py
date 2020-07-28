@@ -10,6 +10,7 @@ import string
 import builtins
 import time
 import psutil
+from termcolor import colored
 from astropy.table import Table
 from astropy.io import ascii
 from scipy import sparse as scisp
@@ -19,6 +20,12 @@ from datetime import date
 from decimal import Decimal
 from alpha_debugger import *
 from IPython.display import clear_output
+
+def get_caller(levels_up):
+    curframe = inspect.currentframe()
+    calframe = inspect.getouterframes(curframe, 2)
+    callername = calframe[levels_up][3]
+    return callername
 
 def save_var(var,varname):
     cd = os.getcwd()
@@ -384,7 +391,7 @@ def sec_der(phi, sigma2, dv):
 
     phi_arr = phi_arrx + phi_arry + phi_arrz
 
-    extrapolate_box(phi_arr )# Due to lack of smoothness at edges, we again simply extrapolate the solution
+    extrapolate_box(phi_arr) # Due to lack of smoothness at edges, we again simply extrapolate the solution
 
     return phi_arr
 
@@ -461,7 +468,7 @@ def phi_guess(v0, disp0, vmin, dv, n):
 
 
 # @profile
-def get_negL(phi, *args):
+def get_neg_L(phi, *args):
     """The function that we wish to optimise. Corresponds to eq. 31 in D98.
 
     N: Number of stars in our sample
@@ -499,12 +506,16 @@ def get_negL(phi, *args):
     Kphi_sum_tot = np.sum(Kphi_sumlog)  # Gives the double sum in the first term
     L_tilde = Kphi_sum_tot / N - exphi_csc.sum() - ((alpha * dvx * dvy * dvz) / 2) * phixhi_sum  # eq. 31 in DB98
         
-    negL = -1 * L_tilde  # Since we want to maximize L_tilde, we should minimize -L_tilde
-    return negL
+    neg_L = -1 * L_tilde  # Since we want to maximize L_tilde, we should minimize -L_tilde
+    try:
+        L.append(L_tilde)
+    except NameError:
+        ''
+    return neg_L
 
 
 # @profile
-def get_grad_negL(phi, *args):
+def get_grad_neg_L(phi, *args):
     """In this function we compute the gradient of L. We compute the derivative for each cell and return a
     1D array of length (nx*ny*nz).
 
@@ -540,26 +551,48 @@ def get_grad_negL(phi, *args):
     dphixhi_csc = dphixhi_coo.tocsc()
 
     grad_L = np.asarray(K_term / N - exphi_csc - ((alpha * dvx * dvy * dvz) / 2) * dphixhi_csc).reshape(nx * ny * nz, )
-
-    return -1 * grad_L
+    
+    neg_grad_L = -1 * grad_L
+    try:
+        gradL.append(np.linalg.norm(neg_grad_L))
+    except NameError:
+        ''
+    return neg_grad_L
 
 
 # @profile
-def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_guess=[], disp=1, noniso=False):
-    """Function that employs scipy.optimize.fmin_cg to maximise the function get_negL().
+def fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it):
+    l1 = ['Optimization terminated sucessfully.\n',
+          colored('Warning','red',attrs=['bold'])+': Maximum number of iterations has been exceeded.\n',
+          colored('Warning','red',attrs=['bold'])+': Desired error not necessarily achieved due to precision loss.\n',
+          colored('Warning','red',attrs=['bold'])+': NaN result encountered.\n']
+    l2 = ('         Current function value : %f\n' % fopt)
+    l3 = ('         Iterations             : %s\n' % fmin_it)
+    l4 = ('         Function evaluations   : %s\n' % fcalls)
+    l5 = ('         Gradient evaluations   : %s\n' % gcalls)
+    print(l1[flag] + l2 + l3 + l4 + l5)
+    return
+
+def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_guess=[], noniso=False):
+    """Function that employs scipy.optimize.fmin_cg to maximise the function get_neg_L().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
     star sample for which the velocity distribution is to be estimated."""
+    
+    # These are appended in get_neg_L() and get_grad_neg_L() respectively and used for plotting
+    builtins.L     = []
+    builtins.gradL = []
+    
     dvx, dvy, dvz = dv
     nx, ny, nz = n
     N = len(pvals)
     
     sigma2, vmean = calc_sigma2(pvals, rhatvals, True, noniso=noniso)
-    if v0_guess == []:
+    if np.size(v0_guess) == 0:
         v0_guess = vmean
-    if disp_guess == []:
+    if np.size(disp_guess) == 0:
         sigma = np.sqrt(sigma2)
         disp_guess = sigma
-    if phi0_guess == []:
+    if np.size(phi0_guess) == 0:
         phi0 = phi_guess(v0_guess, disp_guess, vmin, dv,n)
     else:
         phi0 = phi0_guess
@@ -570,10 +603,30 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
     args = (Kvals, N, alpha, dv, n, sigma2)
     phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
     if callername == '<module>':
-        print('Started fmin_cg...')
-    mxl, phi_all = fmin_cg(get_negL, phi0r, fprime=get_grad_negL, gtol=1e-4, args=args, retall=True, disp=disp)
+        print('Started fmin_cg... ',end='')
+        
+        mxl, fopt, fcalls, gcalls, flag, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False, full_output=True)
+        print(colored('Finished!','green',attrs=['bold','underline']))
+        
+        fmin_it = np.shape(phi_all)[0] - 1
+        fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it)
+    else: 
+        mxl, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False)
+        fmin_it = np.shape(phi_all)[0] - 1
+
+        
+    builtins.L_calls     = np.copy(builtins.L)
+    builtins.gradL_calls = np.copy(builtins.gradL)
+   
+    builtins.L     = []
+    builtins.gradL = []
+    for phi in phi_all:
+        get_neg_L(phi,Kvals, N, alpha, dv, n, sigma2)
+        get_grad_neg_L(phi,Kvals, N, alpha, dv, n, sigma2)
+        
+    builtins.L     = np.asarray(builtins.L)
+    builtins.gradL = np.asarray(builtins.gradL) 
     
-    fmin_it = np.shape(phi_all)[0] - 1
     mxlnew = mxl.reshape(n)
     return mxlnew, phi_all, fmin_it
 
@@ -583,9 +636,7 @@ def Kvals_function_selector(args):
     requires a block-step method based on the systems available RAM. The block-step method calculates Kvals for 
     a block on Nblock stars before making those Kvals sparse, it then proceeds with the next."""
     # Here we find out where max_L() was called:
-    curframe = inspect.currentframe()
-    calframe = inspect.getouterframes(curframe, 2)
-    callername = calframe[2][3]
+    callername = get_caller(2)
     if callername[:9] != 'opt_alpha' and callername != '<module>':
         raise Exception(callername)
     
