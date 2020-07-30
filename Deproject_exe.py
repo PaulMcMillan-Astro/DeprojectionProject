@@ -14,7 +14,7 @@ from Deproject_plots import plot_fv, plot_L, DM_plt_prefs
 DM_plt_prefs()
 """Script that when called by Python in terminal will perform the computations needed
 to run a maximisation scheme. It will also allow you to plot the results and the 
-change in L over all iterations. 
+change in L & dL over all iterations. 
 
 If provided the file 'vars.ini' as an argument such that the terminal command is
 'python Deproject_exe.py vars.ini' it will read the input variables automatically"""
@@ -159,98 +159,97 @@ elif not use_guess:
     mxl, phi_all, fmin_it = max_L(alpha, pvals, rhatvals, vmin, dv, n, noniso=non_iso)
 tf_a = time.time()
 endtime = (tf_a - ti_a)/60
-print("\nThe run took", endtime, 'm:')
+print("\nThe run took", endtime, 'm')
 
 
-# if logging:
-#     # Create a folder for the run and save mxl data
-#     os.chdir('/home/mikkola/Documents/DeprojectionProject')
-#     folder = make_folder()
-#     np.save('RUNS/' + folder + '/mxl_data',mxl)
+if logging:
+    # Create a folder for the run and save mxl data
+    os.chdir('/home/mikkola/Documents/DeprojectionProject')
+    folder = make_folder()
+    np.save('RUNS/' + folder + '/mxl_data',mxl)
     
-#     # Save output
-#     # RUNS folder identifier
-#     with open('logs/log_dir_identifier.txt', 'a') as logfile:
-#         if folder[10] == 'a' and len(folder) == 11:
-#             mark = '='
-#             logfile.write('\n' + mark*120 + '\n')
-#             logfile.write(mark*55 + folder[:10] + mark*55 + '\n')
-#             logfile.write(mark*120 + '\n')
+    # Save output
+    # RUNS folder identifier
+    with open('logs/log_dir_identifier.txt', 'a') as logfile:
+        if folder[10] == 'a' and len(folder) == 11:
+            mark = '='
+            logfile.write('\n' + mark*120 + '\n')
+            logfile.write(mark*55 + folder[:10] + mark*55 + '\n')
+            logfile.write(mark*120 + '\n')
             
-#         logfile.write('\nFolder name : ' + folder + '\n')
-#         logfile.write('Datafile    : ' + datafile + '\n')
-#         logfile.write('fmin its    : ' + str(fmin_it) + '\n')
-#         logfile.write('Time needed : ' + str(endtime/60) + ' mins\n')
+        logfile.write('\nFolder name : ' + folder + '\n')
+        logfile.write('Datafile    : ' + datafile + '\n')
+        logfile.write('fmin its    : ' + str(fmin_it) + '\n')
+        logfile.write('Time needed : ' + str(endtime/60) + ' mins\n')
         
-#     # Logfile in RUNS folder 
-#     with open('RUNS/' + folder + '/log.txt', 'a') as logfile:
-#         logfile.write('Datafile    : ' + datafile + '\n')
-#         logfile.write('fmin its    :' + str(fmin_it) + '\n')
-#         logfile.write('Time needed : ' + str(endtime/60) + ' mins\n')
-#         logfile.write('Labels      : Nbins[1x3], vmin[1x3], bin size, use_guess, noniso, mu_guess, sigma_guess, alpha\n')    
-#         value_string=str((str(list(n)).replace(",",":").replace(":",""),str(list(vmin)).replace(",",":").replace(":","")
-#                           ,str(list(dv)).replace(",",":").replace(":",""),use_guess,non_iso,str(list(v_guess)).replace(",",":").replace(":","")
-#                           , str(list(disp_guess)).replace(",",":").replace(":",""), alpha)).replace("'","")[1:-1]
+    # Logfile in RUNS folder 
+    with open('RUNS/' + folder + '/log.txt', 'a') as logfile:
+        logfile.write('Datafile    : ' + datafile + '\n')
+        logfile.write('fmin its    :' + str(fmin_it) + '\n')
+        logfile.write('Time needed : ' + str(endtime/60) + ' mins\n')
+        logfile.write('Labels      : Nbins[1x3], vmin[1x3], bin size, use_guess, noniso, mu_guess, sigma_guess, alpha\n')    
+        value_string=str((str(list(n)).replace(",",":").replace(":",""),str(list(vmin)).replace(",",":").replace(":","")
+                          ,str(list(dv)).replace(",",":").replace(":",""),use_guess,non_iso,str(list(v_guess)).replace(",",":").replace(":","")
+                          , str(list(disp_guess)).replace(",",":").replace(":",""), alpha)).replace("'","")[1:-1]
         
-#         logfile.write("Values      : " + value_string + '\n')
+        logfile.write("Values      : " + value_string + '\n')
         
-#     # MORE IS SAVE BY SANITY_CHECK()
+    # MORE IS SAVE BY SANITY_CHECK()
         
-# try:
-#     builtins.autoplot = argv[2]
-# except IndexError:
-#     argv.append(0)
+try:
+    builtins.autoplot = argv[2]
+except IndexError:
+    argv.append(0)
     
-# if argv[2] != 'autoplot':
-#     sane = input('Do you want to perform a sanity check [y/n]? ')
-#     while sane != 'y' and sane != 'n':   
-#         sane = input('Incorrect entry, try again [y/n]! ')
+if argv[2] != 'autoplot':
+    sane = input('Do you want to perform a sanity check [y/n]? ')
+    while sane != 'y' and sane != 'n':   
+        sane = input('Incorrect entry, try again [y/n]! ')
     
-#     if sane == 'y':
+    if sane == 'y':
         
-#         from Deproject_test import sanity_check
+        from Deproject_test import sanity_check
         
-#         sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
+        sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
     
-#     elif sane == 'n':
+    elif sane == 'n':
         
-#         print('Suit yourself')
+        print('Suit yourself')
         
-#     shouldiplot = input('Do you want to plot your results [y/n]? ')
-#     while shouldiplot != 'y' and shouldiplot != 'n':   
-#         shouldiplot = input('Incorrect entry, try again [y/n]! ')
+    shouldiplot = input('Do you want to plot your results [y/n]? ')
+    while shouldiplot != 'y' and shouldiplot != 'n':   
+        shouldiplot = input('Incorrect entry, try again [y/n]! ')
     
-#     if shouldiplot == 'y':
-#         from Deproject_plots import plot_fv,plot_L
+    if shouldiplot == 'y':
+        from Deproject_plots import plot_fv,plot_L
         
-#         plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n,logging,folder)
+        plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n,logging,folder)
         
-#         s=0
+        s=0
         
-#         while True:
-#             if s==2:
-#                 break
-#             plotagain = input('Do you want to plot another plane [y/n]? ')
-#             if plotagain == 'y':
-#                 plot_fv(mxl,input('What plane should I project onto [xy/yz/xz]? '),vmin,dv,n,logging,folder)
-#                 s+=1
-#                 continue
-#             else:
-#                 break
+        while True:
+            if s==2:
+                break
+            plotagain = input('Do you want to plot another plane [y/n]? ')
+            if plotagain == 'y':
+                plot_fv(mxl,input('What plane should I project onto [xy/yz/xz]? '),vmin,dv,n,logging,folder)
+                s+=1
+                continue
+            else:
+                break
     
-#     shouldiplotL = input('Do you want to plot the change in L during the maximisation [y/n]? ')
-#     while shouldiplotL != 'y' and shouldiplotL != 'n':   
-#         shouldiplotL = input('Incorrect entry, try again [y/n]! ')
+    shouldiplotL = input('Do you want to plot the change in L and dL during the maximisation [y/n]? ')
+    while shouldiplotL != 'y' and shouldiplotL != 'n':   
+        shouldiplotL = input('Incorrect entry, try again [y/n]! ')
     
-#     if shouldiplotL=='y':
-#         plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha,logging,folder)
+    if shouldiplotL=='y':
+        plot_L_and_dL(logging)
         
-# else:
-#     sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
-#     plot_fv(mxl,'xy',vmin,dv,n,logging,folder)
-#     plot_fv(mxl,'yz',vmin,dv,n,logging,folder)
-#     plot_fv(mxl,'xz',vmin,dv,n,logging,folder)
+else:
+    sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
+    plot_fv(mxl,'xy',vmin,dv,n,logging,folder)
+    plot_fv(mxl,'yz',vmin,dv,n,logging,folder)
+    plot_fv(mxl,'xz',vmin,dv,n,logging,folder)    
+    plot_L_and_dL(logging)
 
-# #Should add a way of saving the mxl data        
-
-# print('My work here is done')
+print('My work here is done')

@@ -27,20 +27,6 @@ def get_caller(levels_up):
     callername = calframe[levels_up][3]
     return callername
 
-def save_var(var,varname):
-    cd = os.getcwd()
-    os.chdir('/home/mikkola/Documents/DeprojectionProject')
-    if 'JPY_PARENT_PID' in os.environ:
-        origin = 'jup'
-    else:
-        origin = 'term'
-    i = 1
-    while varname+'_'+origin+str(i)+'.npy' in os.listdir(origin):
-        i+=1
-        
-    np.save(origin+'/'+varname+'_'+origin+str(i), var)
-    os.chdir(cd)
-# Version adjusted by Paul to fix the edge issues with the gradient
 def make_treefile():
     '''Function that creates a .txt file with name YYYY-MM-DDx where x is the
     first letter that is a non-existing file. 
@@ -70,7 +56,6 @@ def make_treefile():
     file_name = 'logs/tree_' + list_str[list_str != existing_dirs][0] + '.txt'
 
     return file_name
-
 
 # @profile
 def calc_p_rhat(sample):
@@ -325,104 +310,64 @@ def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
 
         return sigma2
 
-def extrapolate_box(box):
-    '''This function takes a 3D grid box and replaces the values along the outer edges with extrapolated values
-    based on the inner box using scipy.interpolate.interpn'''
-    (nx,ny,nz) = box.shape
-
-    points = (np.arange(1,nx-1), 
-              np.arange(1,ny-1),
-              np.arange(1,nz-1))
-
-    IA = np.indices(box.shape).transpose(3,1,2,0)
-
-    xedges = np.concatenate((IA[:,0,:,:].reshape(nx**2,3), IA[:,-1,:,:].reshape(nx**2,3)), axis=0)
-    yedges = np.concatenate((IA[:,:,0,:].reshape(ny**2,3), IA[:,:,-1,:].reshape(ny**2,3)), axis=0)
-    zedges = np.concatenate((IA[0,:,:,:].reshape(nz**2,3), IA[-1,:,:,:].reshape(nz**2,3)), axis=0)
-    edge_coords = np.concatenate((xedges,yedges,zedges),axis=0)
-    edge_coords = np.unique(edge_coords,axis=0) # remove duplicate entries
-
-    I_edges = np.ones((nx,ny,nz),dtype=bool)
-    I_edges[1:-1,1:-1,1:-1] = np.zeros((nx-2,ny-2,nz-2),dtype=bool)
-    edge_vals = interpn(points, box[1:-1, 1:-1, 1:-1], edge_coords, method='linear', bounds_error=False, fill_value=None)
-    box[I_edges] = edge_vals
-    return box
-
 # @profile
 def sec_der(phi, sigma2, dv):
-    """Estimates the second deriative for ln(f(v_l)) given a sample of stars (eq. 30 of D98).
-    Takes contributions at the phi values of adjacent bins for each bin l.
-
-    phi: An array of dimensions (nx,ny,nz) that gives the logarithm of the probability f(v) for a given
-        velocity to be in the different cells of v-space
-
-    sigma2: The velocity dispersion tensor, should be a vector
-
-    dv: The dimensions of each cell in km/s
-
-
-    We create a new, larger box with dimensions n+2 centred on our phi-space box.
-    This allows us to disregard any issues at the bins at the boundaries of our phi-space."""
-
-    nx, ny, nz = phi.shape
-    dvx, dvy, dvz = dv
-    dv2 = dv ** 2
-    sigma2x, sigma2y, sigma2z = sigma2
-
-    nxx, nyy, nzz = nx + 2, ny + 2, nz + 2
-
-    phip = np.pad(phi,1)  # # pads the phi-box with a layer of zeros, phip has dimensions (nxx,nyy,nzz)
-
-    phip[1:-1, 1:-1, 1:-1] = phi  # puts the phi-box in the centre of our larger box
-    extrapolate_box(phip) # This replaces the padded zeros with extrapolated values
+    '''This function calculates eq. 29 (and in turn eq. 30) of WD98. Each cell m has a contribution 
+    of -2*phi_m, phi_(m+e_i), and phi_(m-e_i) from itself, its neighbor one step up in the i 
+    direction and one step down in the i direction respectively. The direction i loops over
+    the x, y, and z directions.
     
-    """Here we compute the contributions from all the adjacent bins simultaneously.
-    In every dimension we sum the phi values of box l-1 and l+1 and multiply with the relevant factor"""
-    phi_fac = np.array([phip[0:nxx - 2, 1:-1, 1:-1] + phip[2:nxx, 1:-1, 1:-1],
-                        phip[1:-1, 0:nyy - 2, 1:-1] + phip[1:-1, 2:nyy, 1:-1],
-                        phip[1:-1, 1:-1, 0:nzz - 2] + phip[1:-1, 1:-1, 2:nzz]])
+    The contributions are added onto a zero array of the same shape as phi and only when 
+    both neighbours are available in the given dimension. e.g. there is no x term when
+    treating on [1, :, :] or [:, :, -1]
+    
+    Inputs are:
+    
+    phi - log of the distribution [nx,ny,nz]
+    
+    sigma2 - squared dispersion in each direction [array of len 3]
+    
+    dv - cell widths [array of len 3]
+    
+    ----
+    
+    Output is:
+    
+    phi_arr - The contributions to each cell, equiv. to eq 29 in WD98'''
 
-    phi_arrx = (sigma2[0] / dv2[0]) * (phi_fac[0] - 2 * phi)
-    phi_arry = (sigma2[1] / dv2[1]) * (phi_fac[1] - 2 * phi)
-    phi_arrz = (sigma2[2] / dv2[2]) * (phi_fac[2] - 2 * phi)
+    phi_arr = np.zeros(phi.shape)
 
-    """We sum all contributions from adjacent boxes and finally add the terms for each box l.
-    Yields a box with the same dimensions as phi, containing the second derivative values for each bin."""
-
-    phi_arr = phi_arrx + phi_arry + phi_arrz
-
-    extrapolate_box(phi_arr) # Due to lack of smoothness at edges, we again simply extrapolate the solution
+    phi_arr[1:-1,:,:] += (sigma2[0] / (dv[0]*dv[0])) * (-2*phi[1:-1, :, :] + phi[2:, :, :] + phi[:-2, :, :])
+    phi_arr[:,1:-1,:] += (sigma2[1] / (dv[1]*dv[1])) * (-2*phi[:, 1:-1, :] + phi[:, 2:, :] + phi[:, :-2, :])
+    phi_arr[:,:,1:-1] += (sigma2[2] / (dv[2]*dv[2])) * (-2*phi[:, :, 1:-1] + phi[:, :, 2:] + phi[:, :, :-2])
 
     return phi_arr
 
 
 # @profile
-def grad_sec_der(phi, *args):
-    sigma2, dv, n = args
-
-    nx, ny, nz = n
-    dv2 = dv ** 2
-
-    """We sum all contributions from adjacent boxes and finally add the terms for each box l.
-    Yields a box with the same dimensions as phi, containing the second derivative values for each bin."""
-
-    eta = sec_der(phi, sigma2, dv)
-
-    eta_big = np.pad(eta,1)
-    extrapolate_box(eta_big)
+def grad_sec_der(phi, sigma2, dv):
+    '''Here we calculate the equivalent factor to sec_der for the gradients third term'''
     
-    eta_fac_rs = np.array([eta_big[0:-2, 1:-1, 1:-1] + eta_big[2:, 1:-1, 1:-1],
-                           eta_big[1:-1, 0:-2, 1:-1] + eta_big[1:-1, 2:, 1:-1],
-                           eta_big[1:-1, 1:-1, 0:-2] + eta_big[1:-1, 1:-1, 2:]])
+    phi_arr = np.zeros(phi.shape)
+    
+    phi_arr_loc = sec_der(phi, sigma2, dv) # This gives us the matrix A_m for all m = (i,j,k) cells
+    
+    # The x contribution
+    phi_arr[:-2,:,:]  += 2 * (phi_arr_loc[1:-1,:,:]) * sigma2[0]/(dv[0]*dv[0]) # Adds A_(m-1) contribution
+    phi_arr[2:,:,:]   += 2 * (phi_arr_loc[1:-1,:,:]) * sigma2[0]/(dv[0]*dv[0]) # Adds A_(m+1) contribution
+    phi_arr[1:-1,:,:] -= 4 * (phi_arr_loc[1:-1,:,:]) * sigma2[0]/(dv[0]*dv[0]) # Adds A_m contribution
 
-    eta_arrx = (sigma2[0] / dv2[0]) * (eta_fac_rs[0] - 2 * eta)
-    eta_arry = (sigma2[1] / dv2[1]) * (eta_fac_rs[1] - 2 * eta)
-    eta_arrz = (sigma2[2] / dv2[2]) * (eta_fac_rs[2] - 2 * eta)
+    # The y contribution
+    phi_arr[:,:-2,:]  += 2 * (phi_arr_loc[:,1:-1,:]) * sigma2[1]/(dv[1]*dv[1]) # Adds A_(m-1) contribution
+    phi_arr[:,2:,:]   += 2 * (phi_arr_loc[:,1:-1,:]) * sigma2[1]/(dv[1]*dv[1]) # Adds A_(m+1) contribution
+    phi_arr[:,1:-1,:] -= 4 * (phi_arr_loc[:,1:-1,:]) * sigma2[1]/(dv[1]*dv[1]) # Adds A_m contribution
 
-    eta_arr = 2 * (eta_arrx + eta_arry + eta_arrz)
-    extrapolate_box(eta_arr)
-
-    return np.ravel(eta_arr)
+    # The z contribution
+    phi_arr[:,:,:-2]  += 2 * (phi_arr_loc[:,:,1:-1]) * sigma2[2]/(dv[2]*dv[2]) # Adds A_(m-1) contribution
+    phi_arr[:,:,2:]   += 2 * (phi_arr_loc[:,:,1:-1]) * sigma2[2]/(dv[2]*dv[2]) # Adds A_(m+1) contribution
+    phi_arr[:,:,1:-1] -= 4 * (phi_arr_loc[:,:,1:-1]) * sigma2[2]/(dv[2]*dv[2]) # Adds A_m contribution
+    
+    return phi_arr
 
 # @profile
 def phi_guess(v0, disp0, vmin, dv, n):
@@ -476,41 +421,33 @@ def get_neg_L(phi, *args):
     Kvals: Array of dimensions (N,nx,ny,nz) containing the K-values for each star in our sample.
 
     alpha: Smoothing parameter that can be found using the function opt_alpha
-    """
-    
-    Kvals, N, alpha, dv, n, sigma2 = args
-    nx, ny, nz = n
-    dvx, dvy, dvz = dv
-
-    """We regain the original shape of our phi guess and proceed to compute the
-    various quantities needed from our functions."""
-
-    phi_unr = np.reshape(phi, n)
-
-    phixhi = sec_der(phi_unr, sigma2, dv) ** 2  # last term
-    phixhi_sum = np.sum(phixhi)
-    exphir = np.exp(phi)
-
-    """We use sparse matrices in our computation of L_tilde because our K- arrays have low
+   
+    We use sparse matrices in our computation of L_tilde because our K- arrays have low
     density. Therefore we use the scipy.sparse package to convert our arrays to sparse arrays.
     Using coo-matrices is faster when building the matrix, but the csc-matrices are faster for
-    arithmetic operations"""
-
-    exphi_coo = scisp.coo_matrix(exphir)
-    exphi_csc = exphi_coo.tocsc()
-
-    Kphi = Kvals.multiply(exphi_csc)  # Order all Kphi values in 1D arrays for each star
-    Kphi_sum = Kphi.sum(axis=1)  # We compute the sum of exp(phi)*K(k|l) for each star
-
-    Kphi_sumlog = np.log(Kphi_sum[Kphi_sum != 0])  # To make sure we don't get infinities
-    Kphi_sum_tot = np.sum(Kphi_sumlog)  # Gives the double sum in the first term
-    L_tilde = Kphi_sum_tot / N - exphi_csc.sum() - ((alpha * dvx * dvy * dvz) / 2) * phixhi_sum  # eq. 31 in DB98
+    arithmetic operations
+    
+    phi_unr regains the original shape of our phi guess and is used to compute the
+    third term of L_tilde."""
+    
+    Kvals, N, alpha, dv, n, sigma2 = args
+    
+    exphir = np.exp(phi)
+    exphi_csc = scisp.coo_matrix(exphir).tocsc()
+    
+    Kphi = Kvals.multiply(exphi_csc).sum(axis=1) # Order all Kphi values in 1D arrays and compute the sum of exp(phi)*K(k|l) for each star
+    Kphi_sum_tot = np.log(Kphi[Kphi != 0]).sum() # To make sure we don't get infinities and .sum() gives the double sum in the first term
+    
+    phi_unr = np.reshape(phi, n)
+    phixhi_sum = (sec_der(phi_unr, sigma2, dv) ** 2).sum()
+    
+    t1 = Kphi_sum_tot / N
+    t2 = exphi_csc.sum()
+    t3 = ((alpha * dv[0] * dv[1] * dv[2]) / 2) * phixhi_sum
+    
+    L_tilde = t1 - t2 - t3 # eq. 31 in DB98
         
     neg_L = -1 * L_tilde  # Since we want to maximize L_tilde, we should minimize -L_tilde
-    try:
-        L.append(L_tilde)
-    except NameError:
-        ''
     return neg_L
 
 
@@ -522,41 +459,28 @@ def get_grad_neg_L(phi, *args):
     args: see get_L
 
     """
-
     Kvals, N, alpha, dv, n, sigma2 = args
-    dvx, dvy, dvz = dv
-    nx, ny, nz = n
-    sigma2x, sigma2y, sigma2z = sigma2
-
-    phi_unr = np.reshape(phi, n)
-
+    
+    
     exphir = np.exp(phi)
-
-    exphi_coo = scisp.coo_matrix(exphir)
-    exphi_csc = exphi_coo.tocsc()
-
+    exphi_csc = scisp.coo_matrix(exphir).tocsc()
+    
     Kphi = exphi_csc.multiply(Kvals)
-
-    Kphi_sum = Kphi_suminv = Kphi.sum(axis=1)
-
-    Kphi_suminv[Kphi_sum.nonzero()] = 1 / Kphi_sum[
-        Kphi_sum.nonzero()]  # We compute the sum of exp(phi)*K(k|l) for each star
-
-    K_term0 = Kphi.multiply(Kphi_suminv)
-    K_term = K_term0.sum(axis=0)  # The final array with the first term for each cell
-
-    dphixhi = grad_sec_der(phi_unr, sigma2, dv, n)
-    dphixhi_rav = dphixhi.reshape((phi.shape[0], 1)).T
-    dphixhi_coo = scisp.coo_matrix(dphixhi_rav)
-    dphixhi_csc = dphixhi_coo.tocsc()
-
-    grad_L = np.asarray(K_term / N - exphi_csc - ((alpha * dvx * dvy * dvz) / 2) * dphixhi_csc).reshape(nx * ny * nz, )
+    Kphi_sum = Kphi.sum(axis=1)
+    Kphi_sum[Kphi_sum.nonzero()] = 1 / Kphi_sum[Kphi_sum.nonzero()] # We compute the sum of exp(phi)*K(k|l) for each star
+    K_term0 = Kphi.multiply(Kphi_sum)
+    K_term = K_term0.sum(axis=0) # The final array with the first term for each cell
+    
+    phi_unr = np.reshape(phi,n)
+    dphixhi = grad_sec_der(phi_unr, sigma2, dv)   
+    
+    t1 = K_term/N
+    t2 = exphi_csc
+    t3 = ((alpha * dv[0] * dv[1] * dv[2]) / 2) * dphixhi.ravel()
+    
+    grad_L = np.asarray(t1 - t2 - t3).reshape(len(phi), )
     
     neg_grad_L = -1 * grad_L
-    try:
-        gradL.append(np.linalg.norm(neg_grad_L))
-    except NameError:
-        ''
     return neg_grad_L
 
 
@@ -577,10 +501,6 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_neg_L().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
     star sample for which the velocity distribution is to be estimated."""
-    
-    # These are appended in get_neg_L() and get_grad_neg_L() respectively and used for plotting
-    builtins.L     = []
-    builtins.gradL = []
     
     dvx, dvy, dvz = dv
     nx, ny, nz = n
@@ -606,27 +526,23 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
         print('Started fmin_cg... ',end='')
         
         mxl, fopt, fcalls, gcalls, flag, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False, full_output=True)
-        print(colored('Finished!','green',attrs=['bold','underline']))
         
+        print(colored('Finished!','green',attrs=['bold','underline']))
         fmin_it = np.shape(phi_all)[0] - 1
         fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it)
     else: 
         mxl, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False)
         fmin_it = np.shape(phi_all)[0] - 1
-
         
-    builtins.L_calls     = np.copy(builtins.L)
-    builtins.gradL_calls = np.copy(builtins.gradL)
-   
-    builtins.L     = []
-    builtins.gradL = []
-    for phi in phi_all:
-        get_neg_L(phi,Kvals, N, alpha, dv, n, sigma2)
-        get_grad_neg_L(phi,Kvals, N, alpha, dv, n, sigma2)
+    if callername == '<module>':
+        builtins.L     = []
+        builtins.gradL = []
+        for phi in phi_all:
+            builtins.L.append(-1*get_neg_L(phi,Kvals, N, alpha, dv, n, sigma2))
+            builtins.gradL.append(np.linalg.norm(get_grad_neg_L(phi,Kvals, N, alpha, dv, n, sigma2)))
+        builtins.L     = np.asarray(builtins.L)
+        builtins.gradL = np.asarray(builtins.gradL)
         
-    builtins.L     = np.asarray(builtins.L)
-    builtins.gradL = np.asarray(builtins.gradL) 
-    
     mxlnew = mxl.reshape(n)
     return mxlnew, phi_all, fmin_it
 

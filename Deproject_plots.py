@@ -109,9 +109,34 @@ def plot_fv(phi,plane,vmin,dv,n,logging=0,folder=' '):
         plt.show()
     
     return 
+
+def plot_L_and_dL(logging):
+    f,ax = plt.subplots(2,1,figsize=(7,9),sharex=True,frameon=False,gridspec_kw={'height_ratios':[3,1]})
+
+    ax[0].plot(range(1,len(gradL)+1),gradL,'k-',linewidth=2)
+    ax[0].set_yscale('log')
+    ax[0].set_xscale('log')
+    ax[0].set_ylabel('$|\\nabla\\widetilde{\mathscr{L}}_\\alpha(\\varphi)|$')
+
+    ax[1].set_ylabel('$\mathscr{L}_\\alpha(\\varphi)$')
+    ax[1].plot(range(1,len(L)+1),L,'k-',linewidth=2)
+    ax[1].set_xlabel('Iterations')
+    ax[1].set_xscale('log')
+    plt.subplots_adjust(hspace=0.02)
+    
+    if logging:
+        plt.savefig('RUNS/' + folder + '/LanddLplot' + '.pdf',format='pdf')
+    try:
+        autoplot
+    except NameError:
+        plt.show()
+
+    return
+
 def plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha,logging,folder):
     
-    """Function that plots all the values found using L_collector."""
+    """ ---This function is now obsolete and replaced by plot_L_and_dL()---
+    Function that plots all the values found using L_collector."""
     
     L_vals = L_collector(phi_all,pvals,rhatvals,vmin,dv,n,alpha)
     
@@ -131,7 +156,8 @@ def plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha,logging,folder):
 
 def L_collector(phi_all,pvals,rhatvals,vmin,dv,n,alpha):
     
-    """Function that takes an array with all values of phi from the maximisation
+    """---This function is now obsolete and replaced by plot_L_and_dL()---
+    Function that takes an array with all values of phi from the maximisation
     scheme and computes the L value for each iteration."""
     
     dvx, dvy, dvz = dv
