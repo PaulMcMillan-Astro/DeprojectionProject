@@ -10,7 +10,7 @@ import string
 import inspect
 from termcolor import colored
 from Deproject_test import sanity_check
-from Deproject_plots import plot_fv, plot_L, DM_plt_prefs
+from Deproject_plots import plot_fv, plot_L_and_dL, DM_plt_prefs
 DM_plt_prefs()
 """Script that when called by Python in terminal will perform the computations needed
 to run a maximisation scheme. It will also allow you to plot the results and the 
@@ -210,7 +210,7 @@ if argv[2] != 'autoplot':
         
         from Deproject_test import sanity_check
         
-        sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
+        sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging)
     
     elif sane == 'n':
         
@@ -221,9 +221,9 @@ if argv[2] != 'autoplot':
         shouldiplot = input('Incorrect entry, try again [y/n]! ')
     
     if shouldiplot == 'y':
-        from Deproject_plots import plot_fv,plot_L
+        from Deproject_plots import plot_fv,plot_L_and_dL
         
-        plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n,logging,folder)
+        plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n,logging)
         
         s=0
         
@@ -232,7 +232,7 @@ if argv[2] != 'autoplot':
                 break
             plotagain = input('Do you want to plot another plane [y/n]? ')
             if plotagain == 'y':
-                plot_fv(mxl,input('What plane should I project onto [xy/yz/xz]? '),vmin,dv,n,logging,folder)
+                plot_fv(mxl,input('What plane should I project onto [xy/yz/xz]? '),vmin,dv,n,logging)
                 s+=1
                 continue
             else:
@@ -246,10 +246,10 @@ if argv[2] != 'autoplot':
         plot_L_and_dL(logging)
         
 else:
-    sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
-    plot_fv(mxl,'xy',vmin,dv,n,logging,folder)
-    plot_fv(mxl,'yz',vmin,dv,n,logging,folder)
-    plot_fv(mxl,'xz',vmin,dv,n,logging,folder)    
+    sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging)
+    plot_fv(mxl,'xy',vmin,dv,n,logging)  
+    plot_fv(mxl,'yz',vmin,dv,n,logging)  
+    plot_fv(mxl,'xz',vmin,dv,n,logging)    
     plot_L_and_dL(logging)
 
 print('My work here is done')

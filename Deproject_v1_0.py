@@ -552,7 +552,7 @@ def Kvals_function_selector(args):
     requires a block-step method based on the systems available RAM. The block-step method calculates Kvals for 
     a block on Nblock stars before making those Kvals sparse, it then proceeds with the next."""
     # Here we find out where max_L() was called:
-    callername = get_caller(2)
+    callername = get_caller(3)
     if callername[:9] != 'opt_alpha' and callername != '<module>':
         raise Exception(callername)
     

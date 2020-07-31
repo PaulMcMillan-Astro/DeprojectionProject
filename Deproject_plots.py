@@ -39,7 +39,7 @@ def DM_plt_prefs():
                         })
     return
 
-def plot_fv(phi,plane,vmin,dv,n,logging=0,folder=' '):
+def plot_fv(phi,plane,vmin,dv,n,logging=0,folder=''):
     
     """Function that plots the velocity distribution f(v) that corresponds to
     a given array of phi-values."""
@@ -110,7 +110,7 @@ def plot_fv(phi,plane,vmin,dv,n,logging=0,folder=' '):
     
     return 
 
-def plot_L_and_dL(logging):
+def plot_L_and_dL(logging, folder=' '):
     f,ax = plt.subplots(2,1,figsize=(7,9),sharex=True,frameon=False,gridspec_kw={'height_ratios':[3,1]})
 
     ax[0].plot(range(1,len(gradL)+1),gradL,'k-',linewidth=2)
@@ -133,7 +133,7 @@ def plot_L_and_dL(logging):
 
     return
 
-def plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha,logging,folder):
+def plot_L(phi_all,pvals,rhatvals,vmin,dv,n,alpha,logging,folder=''):
     
     """ ---This function is now obsolete and replaced by plot_L_and_dL()---
     Function that plots all the values found using L_collector."""
