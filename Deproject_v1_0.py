@@ -21,11 +21,28 @@ from decimal import Decimal
 from alpha_debugger import *
 from IPython.display import clear_output
 
-def get_caller(levels_up):
-    curframe = inspect.currentframe()
-    calframe = inspect.getouterframes(curframe, 2)
-    callername = calframe[levels_up][3]
-    return callername
+def multigrid_steps(n_final):
+    '''This function determines whether 4 or 5 multigrid steps are closest to the desired box shape and returns the box size
+    in each step as well as the zoom factor needed for zoomed_mxl()'''
+    steps = [4,5]
+    step = steps[np.argmin([np.sum(abs(np.ceil(n_final/step)*step - n_final)) for step in steps])]
+    box_steps = np.linspace(1,step,step).reshape(step,1) * np.ceil(n_final/step)
+    
+    zoom_factor = (box_steps[1:] / box_steps[:-1])[:,0]
+    return box_steps.astype(int), zoom_factor
+
+def zoomed_mxl(mxl, zoom_factor):
+    '''Takes a mxl result and upscales it with interpolation'''
+    phi0_guess = zoom(mxl, zoom=zoom_factor, order=3)
+    return phi0_guess
+
+# def get_caller(levels_up):
+#     '''When placed in a function, this function retrieves the name of the functions used to call current function. It then 
+#     returns the calling function's name at the specified number of levels above the current location.'''
+#     curframe = inspect.currentframe()
+#     calframe = inspect.getouterframes(curframe, 2)
+#     callername = calframe[levels_up][3]
+#     return callername
 
 def make_treefile():
     '''Function that creates a .txt file with name YYYY-MM-DDx where x is the
@@ -497,7 +514,8 @@ def fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it):
     print(l1[flag] + l2 + l3 + l4 + l5)
     return
 
-def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_guess=[], noniso=False):
+
+def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_guess=[], noniso=False, printing=True):
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_neg_L().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
     star sample for which the velocity distribution is to be estimated."""
@@ -516,47 +534,96 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
         phi0 = phi_guess(v0_guess, disp_guess, vmin, dv,n)
     else:
         phi0 = phi0_guess
-        
-    Kvals_args = (pvals, rhatvals, vmin, dv, n, N)
-    Kvals, callername = Kvals_function_selector(Kvals_args)
+     
+    Kvals_args = (pvals, rhatvals, vmin, dv, n, N, printing)
+    Kvals = Kvals_function_selector(Kvals_args)
 
     args = (Kvals, N, alpha, dv, n, sigma2)
     phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
-    if callername == '<module>':
-        print('Started fmin_cg... ',end='')
-        
-        mxl, fopt, fcalls, gcalls, flag, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False, full_output=True)
-        
-        print(colored('Finished!','green',attrs=['bold','underline']))
-        fmin_it = np.shape(phi_all)[0] - 1
-        fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it)
-    else: 
-        mxl, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False)
-        fmin_it = np.shape(phi_all)[0] - 1
-        
-    if callername == '<module>':
-        builtins.L     = []
-        builtins.gradL = []
-        for phi in phi_all:
-            builtins.L.append(-1*get_neg_L(phi,Kvals, N, alpha, dv, n, sigma2))
-            builtins.gradL.append(np.linalg.norm(get_grad_neg_L(phi,Kvals, N, alpha, dv, n, sigma2)))
-        builtins.L     = np.asarray(builtins.L)
-        builtins.gradL = np.asarray(builtins.gradL)
+    
+    print('Started fmin_cg... ',end='')
+    mxl, fopt, fcalls, gcalls, flag, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False, full_output=True)
+    print(colored('Finished!','green',attrs=['bold','underline']))
+    
+    fmin_it = np.shape(phi_all)[0] - 1
+    fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it)
+                
+    builtins.L     = []
+    builtins.gradL = []
+    for phi in phi_all:
+        builtins.L.append(-1*get_neg_L(phi,Kvals, N, alpha, dv, n, sigma2))
+        builtins.gradL.append(np.linalg.norm(get_grad_neg_L(phi,Kvals, N, alpha, dv, n, sigma2)))
         
     mxlnew = mxl.reshape(n)
-    return mxlnew, phi_all, fmin_it
+    return mxlnew, fmin_it
+
+
+def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_guess=[], noniso=False, printing=False):
+    """Function that employs scipy.optimize.fmin_cg to maximise the function get_neg_L().
+    It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
+    star sample for which the velocity distribution is to be estimated.
+    
+    This function differs from max_L() in that it starts with a crude box (nx,ny,nz) and itertively increases size 
+    to reach the final box size. This will significantly improve runtime"""
+    
+    dvx, dvy, dvz = dv
+    nx, ny, nz = n
+    N = len(pvals)
+    
+    box_steps, zoom_factor = multigrid_steps(n)
+    if np.prod(box_steps[-1] == n) != 1:
+        print('Not all box dimensions divisible by 4, change from (%s, %s, %s) to (%s, %s, %s)' 
+              % (n[0],n[1],n[2],box_steps[-1,0],box_steps[-1,1],box_steps[-1,2]))
+    
+    sigma2, vmean = calc_sigma2(pvals, rhatvals, True, noniso=noniso)
+    if np.size(v0_guess) == 0:
+        v0_guess = vmean
+    if np.size(disp_guess) == 0:
+        sigma = np.sqrt(sigma2)
+        disp_guess = sigma
+    if np.size(phi0_guess) == 0:
+        phi0 = phi_guess(v0_guess, disp_guess, vmin, dv,n)
+    else:
+        phi0 = phi0_guess
+        
+    builtins.L     = [[] for _ in range(len(box_steps))]
+    builtins.gradL = [[] for _ in range(len(box_steps))]
+        
+    fmin_it = 0
+    for grid_step,n in enumerate(box_steps): 
+        print('Started fmin_cg on (%s, %s, %s) grid... ' % (n[0],n[1],n[2]),end='')
+        if grid_step == len(box_steps):
+            printing = True
+            
+        Kvals_args = (pvals, rhatvals, vmin, dv, n, N, printing)
+        Kvals, callername = Kvals_function_selector(Kvals_args)
+        
+        args = (Kvals, N, alpha, dv, n, sigma2)
+        phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
+        
+        mxl, fopt, fcalls, gcalls, flag, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False, full_output=True)
+        fmin_it += np.shape(phi_all)[0] - 1   
+
+        print(colored('Finished!','green',attrs=['bold','underline']))
+        if grid_step == len(box_steps):
+            fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it)
+        else:
+            phi0 = zoomed_mxl(mxl.reshape(n), zoom_factor[grid_step])
+            
+        for phi in phi_all:
+            builtins.L[grid_step].append(-1*get_neg_L(phi,Kvals, N, alpha, dv, n, sigma2))
+            builtins.gradL[grid_step].append(np.linalg.norm(get_grad_neg_L(phi,Kvals, N, alpha, dv, n, sigma2)))
+    
+    mxlnew = mxl.reshape(n)
+    return mxlnew, fmin_it
 
 
 def Kvals_function_selector(args):
     """This function determines if Kvals can be calculated using a faster numpy pre-allocation method or if it
     requires a block-step method based on the systems available RAM. The block-step method calculates Kvals for 
     a block on Nblock stars before making those Kvals sparse, it then proceeds with the next."""
-    # Here we find out where max_L() was called:
-    callername = get_caller(3)
-    if callername[:9] != 'opt_alpha' and callername != '<module>':
-        raise Exception(callername)
     
-    pvals, rhatvals, vmin, dv, n, N = args
+    pvals, rhatvals, vmin, dv, n, N, printing = args
     
     # We allow only 90% of the available RAM to be used to allow other processes to run simulataneously.
     AvMem = psutil.virtual_memory().available*0.9
@@ -565,25 +632,25 @@ def Kvals_function_selector(args):
     Nblock = int(np.floor(MaxFloats / np.prod(n)))  # Largest possible block size
     MemReq = 8*N*np.prod(n)/1e9
     AvMem /= 1e9
-    if callername == '<module>':
+    if printing == True:
         print('Allocated RAM: %.2f GB  \nRequired RAM : %.2f GB | Block size = %s' % (AvMem, MemReq, Nblock))
 
     if Nblock > N:
-        if callername == '<module>':
+        if printing == True:
             print('Fast Numpy Kvals run possible, running...\n')
             Kvals = KvalsNumpyMethod(pvals, rhatvals, vmin, dv, n)
             print('Finished kvals.\n')
-        else:
+        elif printing == False:
             Kvals = KvalsNumpyMethod(pvals, rhatvals, vmin, dv, n)
     else:
-        if callername == '<module>':
+        if printing == True:
             print('Slightly slower Block Kvals run needed, running...\n')
             Kvals = KvalsBlockMethod(pvals, rhatvals, vmin, dv, n, Nblock)
             print('Finished kvals.\n')
-        else:
+        elif printing == False:
             Kvals = KvalsBlockMethod(pvals, rhatvals, vmin, dv, n, Nblock)
 
-    return Kvals, callername
+    return Kvals
 
 
 # @profile

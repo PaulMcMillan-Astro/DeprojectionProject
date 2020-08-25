@@ -3,6 +3,7 @@
 *_testing
 gss_struct.py
 *.ipynb
+*.vot
 speedtest.py
 testrun*
 timecheck.py

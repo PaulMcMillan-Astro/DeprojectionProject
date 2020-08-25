@@ -1,4 +1,3 @@
-from sys import argv
 import os
 os.chdir('/home/mikkola/Documents/DeprojectionProject')
 from Deproject_v1_0 import *
@@ -17,20 +16,43 @@ to run a maximisation scheme. It will also allow you to plot the results and the
 change in L & dL over all iterations. 
 
 If provided the file 'vars.ini' as an argument such that the terminal command is
-'python Deproject_exe.py vars.ini' it will read the input variables automatically"""
-try: 
-    in_str     = argv[0] + ' ' + argv[1] + ' ' + argv[2]
-except IndexError:
-    in_str     = argv[0] + ' ' + argv[1]
-    in_allowed = 'Deproject_exe.py vars.ini'
-else:
-    in_allowed = 'Deproject_exe.py vars.ini autoplot'
+'python Deproject_exe.py -i vars.ini' it will read the input variables automatically"""
 
-if in_str != in_allowed:
-    raise NameError(colored('\nThe function can only be called as either:','red',attrs=['bold']) +
-                    colored('\nDeproject_exe.py vars.ini', 'red') + 
-                    colored('\nDeproject_exe.py vars.ini autoplot', 'red'))
+import argparse
 
+parser = argparse.ArgumentParser()
+parser._action_groups.pop()
+
+required = parser.add_argument_group('required arguments')
+optional = parser.add_argument_group('optional arguments')
+
+required.add_argument('-i',
+                    default='vars.ini',
+                    help='datafile, typically vars.ini',
+                    metavar='vars.ini',
+                    required=True)
+
+optional.add_argument("-a",
+                    default='False',
+                    const='False',
+                    nargs='?',
+                    choices=['True', 'False'],
+                    help='Automatic plotting [default : False]',
+                    metavar='bool')
+optional.add_argument("-f",
+                    default='multigrid_max_L',
+                    const='multigrid_max_L',
+                    nargs='?',
+                    choices=['max_L', 'multigrid_max_L'],
+                    help='Select PMLE scheme [default : multigrid_max_L]',
+                    metavar='func')
+                
+args = parser.parse_args()
+
+if args.f == 'max_L:
+    from Deproject_v1_0 import max_L as max_func
+elif args.f == 'multigrid_max_L':
+    from Deproject_v1_0 import multigrid_max_L as max_func
 
 # Function that creates a non-existing folder to store output data
 def make_folder():
@@ -79,84 +101,48 @@ def process_input(file_): #Function that reads the input file if any
     return h_file
         
 
-#Depending on which type of sample we want to use, we either read a fits file
-#automatically or provide inputs manually
-  
+# Read the input file
+guessfile = args.i #The vars.ini file
+vars_ = process_input(guessfile)
+N = int(vars_[0][0])
+n = np.array(vars_[1][0].split(',')[:],dtype=int)
+vmin = np.array(vars_[2][0].split(',')[:],dtype=float)
+dv = np.array(vars_[3][0].split(',')[:],dtype=float)
+use_guess = bool(int(vars_[4][0]))
+non_iso = bool(int(vars_[5][0]))
+v_guess = np.array(vars_[6][0].split(',')[:],dtype=float)
+disp_guess = np.array(vars_[7][0].split(',')[:],dtype=float)
+alpha = float(vars_[8][0])
+datafile = vars_[9][0].rstrip('\n')
+logging = bool(int(vars_[10][0]))
+
+
 try:
-    argv[1]
-except (IndexError,NameError):
-    raise NameError("Couldn't access the input file. Are you sure you wrote it correctly?")
-else:
-    guessfile = argv[1] #The vars.ini file
-    vars_ = process_input(guessfile)
-    N = int(vars_[0][0])
-    n = np.array(vars_[1][0].split(',')[:],dtype=int)
-    vmin = np.array(vars_[2][0].split(',')[:],dtype=float)
-    dv = np.array(vars_[3][0].split(',')[:],dtype=float)
-    use_guess = bool(int(vars_[4][0]))
-    non_iso = bool(int(vars_[5][0]))
-    v_guess = np.array(vars_[6][0].split(',')[:],dtype=float)
-    disp_guess = np.array(vars_[7][0].split(',')[:],dtype=float)
-    alpha = float(vars_[8][0])
-    datafile = vars_[9][0].rstrip('\n')
-    logging = bool(int(vars_[10][0]))
-if datafile=="Distances_PJM2017.csv":
-    try:
-        os.chdir("DATA/")
-    except FileNotFoundError:
-        print('Edit your desired path in the script')
-    data_raw = Table.read(str(datafile))
-    flagset = 'flag_any'
-    data_raw = filt_data(data_raw,flagset)
-
-    dist = data_raw['distance']*u.pc
-    filt = dist < 200*u.pc
-    dist = dist[filt]
-    
-    RA = (data_raw['RAdeg']*u.degree)[filt]
-    DEC = (data_raw['DEdeg']*u.degree)[filt]
-    plx = (data_raw['parallax']*u.mas)[filt]
-    pm_RA = (data_raw['pmRA_TGAS']*u.mas/u.yr)[filt]
-    pm_DEC = (data_raw['pmDE_TGAS']*u.mas/u.yr)[filt]
-
-
-    filt_data(data_raw,flagset)
+    os.chdir("DATA/")
+except FileNotFoundError:
+    print('Edit your desired path in the script')
+data_raw = tableread(str(datafile))
+dist = 1000/data_raw['parallax']*u.pc        
+RA = (data_raw['ra']*u.degree)
+DEC = (data_raw['dec']*u.degree)
+plx = (data_raw['parallax']*u.mas)
+pm_RA = (data_raw['pmra']*u.mas/u.yr)
+pm_DEC = (data_raw['pmdec']*u.mas/u.yr)
+print("Sample has " + str(len(dist)) + " stars")
 
 
 
-    #We now just set up our data and are ready to apply cuts to it
+sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
 
-    sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
-
-    sample = sample_icrs.transform_to(coord.Galactic)
-    
-elif datafile[-5:] == 'table':
-    try:
-        os.chdir("DATA/")
-    except FileNotFoundError:
-        print('Edit your desired path in the script')
-    data_raw = tableread(str(datafile))
-    dist = 1000/data_raw['parallax']*u.pc        
-    RA = (data_raw['ra']*u.degree)
-    DEC = (data_raw['dec']*u.degree)
-    plx = (data_raw['parallax']*u.mas)
-    pm_RA = (data_raw['pmra']*u.mas/u.yr)
-    pm_DEC = (data_raw['pmdec']*u.mas/u.yr)
-    print("Sample has " + str(len(dist)) + " stars")
-
-
-
-    sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
-
-    sample = sample_icrs.transform_to(coord.Galactic)
+sample = sample_icrs.transform_to(coord.Galactic)
 
 
 pvals, rhatvals = calc_p_rhat(sample) 
     
 if use_guess:
-    mxl, phi_all, fmin_it = max_L(alpha, pvals, rhatvals, vmin, dv, n,v0_guess=v_guess, disp_guess=disp_guess, noniso=non_iso)
+    mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n ,v0_guess=v_guess, disp_guess=disp_guess, noniso=non_iso)
 elif not use_guess:
-    mxl, phi_all, fmin_it = max_L(alpha, pvals, rhatvals, vmin, dv, n, noniso=non_iso)
+    mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n, noniso=non_iso)
 tf_a = time.time()
 endtime = (tf_a - ti_a)/60
 print("\nThe run took", endtime, 'm')
@@ -196,12 +182,8 @@ if logging:
         
     # MORE IS SAVE BY SANITY_CHECK()
         
-try:
-    builtins.autoplot = argv[2]
-except IndexError:
-    argv.append(0)
-    
-if argv[2] != 'autoplot':
+
+if not args.a:
     sane = input('Do you want to perform a sanity check [y/n]? ')
     while sane != 'y' and sane != 'n':   
         sane = input('Incorrect entry, try again [y/n]! ')
