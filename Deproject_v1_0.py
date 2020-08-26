@@ -23,27 +23,25 @@ from alpha_debugger import *
 from IPython.display import clear_output
 
 def multigrid_steps(n_final):
-    '''This function determines whether 4 or 5 multigrid steps are closest to the desired box shape and returns the box size
-    in each step as well as the zoom factor needed for zoomed_mxl()'''
-    steps = [4,5]
-    step = steps[np.argmin([np.sum(abs(np.ceil(n_final/step)*step - n_final)) for step in steps])]
-    box_steps = np.linspace(1,step,step).reshape(step,1) * np.ceil(n_final/step)
+    '''This function determines how many multigrids steps can be performed and returns the box size
+    in each step. In addition, if the starting box dimensions are not divisible by 2**steps the final box dimensions
+    are changed to accomodate this.'''
+    step = 5
+    while any(np.round(n/(2**step)) < 10):
+        step -= 1
+    print(step)
+    box_steps = 2**np.linspace(0,step,step+1).reshape(step+1,1) * np.round(n/(2**step))
     
-    zoom_factor = (box_steps[1:] / box_steps[:-1])[:,0]
-    return box_steps.astype(int), zoom_factor
+    if not all(box_steps[-1] == n):
+    print('To oct-split box the recommended %s times, dimensions were changed from (%s, %s, %s) to (%s, %s, %s)\n' 
+          % (len(box_steps),n[0],n[1],n[2],box_steps[-1,0],box_steps[-1,1],box_steps[-1,2]))
+    return box_steps.astype(int)
+    
 
-def zoomed_mxl(mxl, zoom_factor):
+def zoomed_mxl(mxl):
     '''Takes a mxl result and upscales it with interpolation'''
-    phi0_guess = zoom(mxl, zoom=zoom_factor, order=3)
+    phi0_guess = zoom(mxl, zoom=2, order=3)
     return phi0_guess
-
-# def get_caller(levels_up):
-#     '''When placed in a function, this function retrieves the name of the functions used to call current function. It then 
-#     returns the calling function's name at the specified number of levels above the current location.'''
-#     curframe = inspect.currentframe()
-#     calframe = inspect.getouterframes(curframe, 2)
-#     callername = calframe[levels_up][3]
-#     return callername
 
 def make_treefile():
     '''Function that creates a .txt file with name YYYY-MM-DDx where x is the
@@ -566,14 +564,13 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
     This function differs from max_L() in that it starts with a crude box (nx,ny,nz) and itertively increases size 
     to reach the final box size. This will significantly improve runtime"""
     
-    dvx, dvy, dvz = dv
-    nx, ny, nz = n
     N = len(pvals)
+    vmax = vmin + dv*n
     
-    box_steps, zoom_factor = multigrid_steps(n)
-    if np.prod(box_steps[-1] == n) != 1:
-        print('Not all box dimensions divisible by %s, changed from (%s, %s, %s) to (%s, %s, %s)\n' 
-              % (len(box_steps),n[0],n[1],n[2],box_steps[-1,0],box_steps[-1,1],box_steps[-1,2]))
+    box_steps = multigrid_steps(n)
+    
+    n = box_steps[0]
+    dv = (vmax-vmin)/n
     
     sigma2, vmean = calc_sigma2(pvals, rhatvals, True, noniso=noniso)
     if np.size(v0_guess) == 0:
@@ -582,7 +579,7 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
         sigma = np.sqrt(sigma2)
         disp_guess = sigma
     if np.size(phi0_guess) == 0:
-        phi0 = phi_guess(v0_guess, disp_guess, vmin, dv,box_steps[0])
+        phi0 = phi_guess(v0_guess, disp_guess, vmin, dv,n)
     else:
         phi0 = phi0_guess
         
@@ -593,7 +590,8 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
     for grid_step,n in enumerate(box_steps): 
         if grid_step == len(box_steps)-1:
             printing = True
-
+            
+        dv = (vmax-vmin)/n
             
         Kvals_args = (pvals, rhatvals, vmin, dv, n, N, printing)
         Kvals = Kvals_function_selector(Kvals_args)

@@ -9,6 +9,8 @@ import string
 import inspect
 from termcolor import colored
 from Deproject_test import sanity_check
+import matplotlib
+matplotlib.use('TkAgg')
 from Deproject_plots import plot_fv, plot_L_and_dL, DM_plt_prefs
 DM_plt_prefs()
 """Script that when called by Python in terminal will perform the computations needed
