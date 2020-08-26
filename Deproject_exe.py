@@ -49,7 +49,7 @@ optional.add_argument("-f",
                 
 args = parser.parse_args()
 
-if args.f == 'max_L:
+if args.f == 'max_L':
     from Deproject_v1_0 import max_L as max_func
 elif args.f == 'multigrid_max_L':
     from Deproject_v1_0 import multigrid_max_L as max_func
@@ -128,7 +128,7 @@ DEC = (data_raw['dec']*u.degree)
 plx = (data_raw['parallax']*u.mas)
 pm_RA = (data_raw['pmra']*u.mas/u.yr)
 pm_DEC = (data_raw['pmdec']*u.mas/u.yr)
-print("Sample has " + str(len(dist)) + " stars")
+print("Sample has " + str(len(dist)) + " stars\n")
 
 
 
@@ -145,7 +145,7 @@ elif not use_guess:
     mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n, noniso=non_iso)
 tf_a = time.time()
 endtime = (tf_a - ti_a)/60
-print("\nThe run took", endtime, 'm')
+print("\nThe run took: ", endtime, 'mins')
 
 
 if logging:

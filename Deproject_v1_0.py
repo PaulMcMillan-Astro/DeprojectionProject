@@ -16,6 +16,7 @@ from astropy.io import ascii
 from scipy import sparse as scisp
 from scipy.optimize import fmin_cg
 from scipy.interpolate import interpn
+from scipy.ndimage import zoom
 from datetime import date
 from decimal import Decimal
 from alpha_debugger import *
@@ -451,7 +452,6 @@ def get_neg_L(phi, *args):
     
     exphir = np.exp(phi)
     exphi_csc = scisp.coo_matrix(exphir).tocsc()
-    
     Kphi = Kvals.multiply(exphi_csc).sum(axis=1) # Order all Kphi values in 1D arrays and compute the sum of exp(phi)*K(k|l) for each star
     Kphi_sum_tot = np.log(Kphi[Kphi != 0]).sum() # To make sure we don't get infinities and .sum() gives the double sum in the first term
     
@@ -572,8 +572,8 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
     
     box_steps, zoom_factor = multigrid_steps(n)
     if np.prod(box_steps[-1] == n) != 1:
-        print('Not all box dimensions divisible by 4, change from (%s, %s, %s) to (%s, %s, %s)' 
-              % (n[0],n[1],n[2],box_steps[-1,0],box_steps[-1,1],box_steps[-1,2]))
+        print('Not all box dimensions divisible by %s, changed from (%s, %s, %s) to (%s, %s, %s)\n' 
+              % (len(box_steps),n[0],n[1],n[2],box_steps[-1,0],box_steps[-1,1],box_steps[-1,2]))
     
     sigma2, vmean = calc_sigma2(pvals, rhatvals, True, noniso=noniso)
     if np.size(v0_guess) == 0:
@@ -582,7 +582,7 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
         sigma = np.sqrt(sigma2)
         disp_guess = sigma
     if np.size(phi0_guess) == 0:
-        phi0 = phi_guess(v0_guess, disp_guess, vmin, dv,n)
+        phi0 = phi_guess(v0_guess, disp_guess, vmin, dv,box_steps[0])
     else:
         phi0 = phi0_guess
         
@@ -591,21 +591,23 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
         
     fmin_it = 0
     for grid_step,n in enumerate(box_steps): 
-        print('Started fmin_cg on (%s, %s, %s) grid... ' % (n[0],n[1],n[2]),end='')
-        if grid_step == len(box_steps):
+        if grid_step == len(box_steps)-1:
             printing = True
+
             
         Kvals_args = (pvals, rhatvals, vmin, dv, n, N, printing)
-        Kvals, callername = Kvals_function_selector(Kvals_args)
+        Kvals = Kvals_function_selector(Kvals_args)
         
         args = (Kvals, N, alpha, dv, n, sigma2)
         phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
         
+        print('Started fmin_cg on (%s, %s, %s) grid... ' % (n[0],n[1],n[2]),end='', flush=True)
         mxl, fopt, fcalls, gcalls, flag, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False, full_output=True)
         fmin_it += np.shape(phi_all)[0] - 1   
 
-        print(colored('Finished!','green',attrs=['bold','underline']))
-        if grid_step == len(box_steps):
+        print(colored('Finished!','green',attrs=['bold','underline']),end='')
+        print(' fopt : %s' % fopt)
+        if grid_step == len(box_steps)-1:
             fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it)
         else:
             phi0 = zoomed_mxl(mxl.reshape(n), zoom_factor[grid_step])
