@@ -22,7 +22,7 @@ from decimal import Decimal
 from alpha_debugger import *
 from IPython.display import clear_output
 
-def multigrid_steps(n_final):
+def multigrid_steps(n):
     '''This function determines how many multigrids steps can be performed and returns the box size
     in each step. In addition, if the starting box dimensions are not divisible by 2**steps the final box dimensions
     are changed to accomodate this.'''
@@ -30,11 +30,11 @@ def multigrid_steps(n_final):
     while any(np.round(n/(2**step)) < 10):
         step -= 1
     print(step)
-    box_steps = 2**np.linspace(0,step,step+1).reshape(step+1,1) * np.round(n/(2**step))
+    box_steps = (2**np.linspace(0,step,step+1).reshape(step+1,1) * np.round(n/(2**step))).astype(int)
     
     if not all(box_steps[-1] == n):
-    print('To oct-split box the recommended %s times, dimensions were changed from (%s, %s, %s) to (%s, %s, %s)\n' 
-          % (len(box_steps),n[0],n[1],n[2],box_steps[-1,0],box_steps[-1,1],box_steps[-1,2]))
+        print('To oct-split box the recommended %s times, dimensions were changed from (%s, %s, %s) to (%s, %s, %s)\n' 
+              % (len(box_steps),n[0],n[1],n[2],box_steps[-1,0],box_steps[-1,1],box_steps[-1,2]))
     return box_steps.astype(int)
     
 
@@ -608,7 +608,7 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
         if grid_step == len(box_steps)-1:
             fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it)
         else:
-            phi0 = zoomed_mxl(mxl.reshape(n), zoom_factor[grid_step])
+            phi0 = zoomed_mxl(mxl.reshape(n))
             
         for phi in phi_all:
             builtins.L[grid_step].append(-1*get_neg_L(phi,Kvals, N, alpha, dv, n, sigma2))
