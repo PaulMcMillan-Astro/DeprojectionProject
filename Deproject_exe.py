@@ -1,6 +1,7 @@
 import os
 os.chdir('/home/mikkola/Documents/DeprojectionProject')
 from Deproject_v1_0 import *
+from Deproject_oa_scripts import *
 import time
 from astropy.io.ascii import read as tableread
 from datetime import date
@@ -10,6 +11,7 @@ import inspect
 from termcolor import colored
 from Deproject_test import sanity_check
 import matplotlib
+from memory_profiler import LogFile
 matplotlib.use('TkAgg')
 from Deproject_plots import plot_fv, plot_L_and_dL, DM_plt_prefs
 DM_plt_prefs()
@@ -20,6 +22,7 @@ change in L & dL over all iterations.
 If provided the file 'vars.ini' as an argument such that the terminal command is
 'python Deproject_exe.py -i vars.ini' it will read the input variables automatically"""
 
+#@profile
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -35,11 +38,11 @@ required.add_argument('-i',
                     required=True)
 
 optional.add_argument("-a",
-                    default='False',
-                    const='False',
+                    default='0',
+                    const='0',
                     nargs='?',
-                    choices=['True', 'False'],
-                    help='Automatic plotting [default : False]',
+                    choices=['1', '0'],
+                    help='Automatic plotting [default : 0]',
                     metavar='bool')
 optional.add_argument("-f",
                     default='multigrid_max_L',
@@ -52,10 +55,13 @@ optional.add_argument("-f",
 args = parser.parse_args()
 
 if args.f == 'max_L':
-    from Deproject_v1_0 import max_L as max_func
+    #from Deproject_v1_0 import max_L as max_func
+    from Deproject_oa_scripts import max_L_oa as max_func
 elif args.f == 'multigrid_max_L':
-    from Deproject_v1_0 import multigrid_max_L as max_func
+    # from Deproject_v1_0 import multigrid_max_L as max_func
+    from Deproject_oa_scripts import multigrid_max_L_oa as max_func
 
+    
 # Function that creates a non-existing folder to store output data
 def make_folder():
     '''Function that writes a folder with name YYYY-MM-DDx where x 
@@ -138,9 +144,8 @@ sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_D
 
 sample = sample_icrs.transform_to(coord.Galactic)
 
-
 pvals, rhatvals = calc_p_rhat(sample) 
-    
+
 if use_guess:
     mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n ,v0_guess=v_guess, disp_guess=disp_guess, noniso=non_iso)
 elif not use_guess:
@@ -149,6 +154,8 @@ tf_a = time.time()
 endtime = (tf_a - ti_a)/60
 print("\nThe run took: ", endtime, 'mins')
 
+n = builtins.n
+dv = builtins.dv
 
 if logging:
     # Create a folder for the run and save mxl data
@@ -173,7 +180,7 @@ if logging:
     # Logfile in RUNS folder 
     with open('RUNS/' + folder + '/log.txt', 'a') as logfile:
         logfile.write('Datafile    : ' + datafile + '\n')
-        logfile.write('fmin its    :' + str(fmin_it) + '\n')
+        logfile.write('fmin its    : ' + str(fmin_it) + '\n')
         logfile.write('Time needed : ' + str(endtime/60) + ' mins\n')
         logfile.write('Labels      : Nbins[1x3], vmin[1x3], bin size, use_guess, noniso, mu_guess, sigma_guess, alpha\n')    
         value_string=str((str(list(n)).replace(",",":").replace(":",""),str(list(vmin)).replace(",",":").replace(":","")
@@ -183,9 +190,11 @@ if logging:
         logfile.write("Values      : " + value_string + '\n')
         
     # MORE IS SAVE BY SANITY_CHECK()
+else:
+    folder = ''
         
-
-if not args.a:
+builtins.autoplot = bool(int(args.a))
+if not autoplot:
     sane = input('Do you want to perform a sanity check [y/n]? ')
     while sane != 'y' and sane != 'n':   
         sane = input('Incorrect entry, try again [y/n]! ')
@@ -207,7 +216,7 @@ if not args.a:
     if shouldiplot == 'y':
         from Deproject_plots import plot_fv,plot_L_and_dL
         
-        plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n,logging)
+        plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n,folder,logging)
         
         s=0
         
@@ -216,7 +225,7 @@ if not args.a:
                 break
             plotagain = input('Do you want to plot another plane [y/n]? ')
             if plotagain == 'y':
-                plot_fv(mxl,input('What plane should I project onto [xy/yz/xz]? '),vmin,dv,n,logging)
+                plot_fv(mxl,input('What plane should I project onto [xy/yz/xz]? '),vmin,dv,n,folder,logging)
                 s+=1
                 continue
             else:
@@ -227,13 +236,13 @@ if not args.a:
         shouldiplotL = input('Incorrect entry, try again [y/n]! ')
     
     if shouldiplotL=='y':
-        plot_L_and_dL(logging)
+        plot_L_and_dL(folder,logging)
         
 else:
-    sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging)
-    plot_fv(mxl,'xy',vmin,dv,n,logging)  
-    plot_fv(mxl,'yz',vmin,dv,n,logging)  
-    plot_fv(mxl,'xz',vmin,dv,n,logging)    
-    plot_L_and_dL(logging)
+    #sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
+    plot_fv(mxl,'xy',vmin,dv,n,folder,logging)  
+    plot_fv(mxl,'yz',vmin,dv,n,folder,logging)  
+    plot_fv(mxl,'xz',vmin,dv,n,folder,logging)    
+    plot_L_and_dL(folder, logging)
 
 print('My work here is done')

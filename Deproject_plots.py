@@ -39,7 +39,7 @@ def DM_plt_prefs():
                         })
     return
 
-def plot_fv(phi,plane,vmin,dv,n,logging=0,folder=''):
+def plot_fv(phi,plane,vmin,dv,n,folder,logging=0):
     
     """Function that plots the velocity distribution f(v) that corresponds to
     a given array of phi-values."""
@@ -79,8 +79,8 @@ def plot_fv(phi,plane,vmin,dv,n,logging=0,folder=''):
     
     twodfv = np.sum(fv,axis=axsum)
     
-    xbins = np.arange(x0,x1+dx,dx)
-    ybins = np.arange(y0,y1+dy,dy)
+    xbins = np.linspace(x0,x1,n1+1)
+    ybins = np.linspace(y0,y1,n2+1)
     
     xc = (xbins[1:]+xbins[:-1])/2
     yc = (ybins[1:]+ybins[:-1])/2
@@ -93,7 +93,6 @@ def plot_fv(phi,plane,vmin,dv,n,logging=0,folder=''):
     ax.set_xlabel(xlab+' [km s$^{-1}$]',size='large')
     ax.set_ylabel(ylab+' [km s$^{-1}$]',size='large')
 #    im = ax.imshow(twodfv.T,origin='lower',interpolation='bilinear',vmin=0,vmax=twodfv.max(),cmap = plt.cm.get_cmap('plasma'),extent=extent)
-    
     im = ax.contourf(X,Y,twodfv.T,40,origin='lower',cmap = plt.cm.get_cmap('bone_r'),linestyles='solid')
     ax.contour(X,Y,twodfv.T,10,origin='lower',colors='k',linewidths=0.5)
     
@@ -103,16 +102,23 @@ def plot_fv(phi,plane,vmin,dv,n,logging=0,folder=''):
     
     if logging:
         plt.savefig('RUNS/' + folder + '/fvplot_' + plane + '.pdf',format='pdf')
-    try:
-        autoplot
-    except NameError:
+    if not builtins.autoplot:
         plt.show()
     
     return 
 
-def plot_L_and_dL(logging, folder=' '):
+def plot_L_and_dL(folder, logging=0):
     f,ax = plt.subplots(2,1,figsize=(7,9),sharex=True,frameon=False,gridspec_kw={'height_ratios':[3,1]})
+    
+    L = builtins.L
+    gradL = builtins.gradL    
+    did_mg = any(isinstance(entry, list) for entry in L)
+    if did_mg:
+        mg_string = "Iterations per grid:\n" + " -> ".join([str(len(l)) for l in L])
 
+        L = sum(L,[])
+        gradL = sum(gradL,[])
+    
     ax[0].plot(range(1,len(gradL)+1),gradL,'k-',linewidth=2)
     ax[0].set_yscale('log')
     ax[0].set_xscale('log')
@@ -122,13 +128,15 @@ def plot_L_and_dL(logging, folder=' '):
     ax[1].plot(range(1,len(L)+1),L,'k-',linewidth=2)
     ax[1].set_xlabel('Iterations')
     ax[1].set_xscale('log')
-    plt.subplots_adjust(hspace=0.02)
     
+    if did_mg:
+        bbox_props = dict(boxstyle="square", fc="white", ec="k", lw=1)
+        ax[0].text(0.012,1.02, mg_string, transform=ax[0].transAxes,fontsize=14, bbox=bbox_props)
+    
+    plt.tight_layout(h_pad=0.02)
     if logging:
         plt.savefig('RUNS/' + folder + '/LanddLplot' + '.pdf',format='pdf')
-    try:
-        autoplot
-    except NameError:
+    if not builtins.autoplot:
         plt.show()
 
     return

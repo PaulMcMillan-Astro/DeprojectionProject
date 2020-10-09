@@ -21,3 +21,6 @@ venv/
 /.ipynb_checkpoints
 compvar.py
 DanielsTesting.ipynb
+fil-result/
+memory_profiler.log
+*.log
