@@ -1,5 +1,5 @@
 import os
-os.chdir('/home/mikkola/Documents/DeprojectionProject')
+os.chdir('/home/daniel/DeprojectionProject')
 from Deproject_v1_0 import *
 from Deproject_oa_scripts import *
 import time
@@ -59,7 +59,7 @@ if args.f == 'max_L':
     from Deproject_oa_scripts import max_L_oa as max_func
 elif args.f == 'multigrid_max_L':
     # from Deproject_v1_0 import multigrid_max_L as max_func
-    from Deproject_oa_scripts import multigrid_max_L_oa as max_func
+    from Deproject_oa_scripts import multigrid_max_L as max_func
 
     
 # Function that creates a non-existing folder to store output data
@@ -159,7 +159,7 @@ dv = builtins.dv
 
 if logging:
     # Create a folder for the run and save mxl data
-    os.chdir('/home/mikkola/Documents/DeprojectionProject')
+    os.chdir('/home/daniel/DeprojectionProject')
     folder = make_folder()
     np.save('RUNS/' + folder + '/mxl_data',mxl)
     

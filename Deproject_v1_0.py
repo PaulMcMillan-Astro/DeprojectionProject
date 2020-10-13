@@ -68,7 +68,7 @@ def multigrid_steps(n):
 #@profile
 def write_variables():  
     cwd = os.getcwd()
-    os.chdir('/home/mikkola/Documents/DeprojectionProject')
+    os.chdir('/home/daniel/DeprojectionProject')
     variables = list(builtins.lv.items())
     l_vars = []
     for var, obj in variables:
@@ -731,7 +731,7 @@ def Kvals_function_selector(args):
     if printing == True:
         print('Allocated RAM: %.2f GB  \nRequired RAM : %.2f GB | Block size = %s' % (AvMem, MemReq, Nblock))
     print('Allocated RAM: %.2f GB  \nRequired RAM : %.2f GB | Block size = %s' % (AvMem, MemReq, Nblock))
-
+    
     if Nblock > N:
         if printing == True:
             print('Fast Numpy Kvals run possible, running...\n')
@@ -767,7 +767,7 @@ def KvalsNumpyMethod(pvals, rhatvals, vmin, dv, n):
 
     Kvals = scisp.csc_matrix(Kvals)
     
-    return (Kvals)
+    return Kvals
 
 
 # 
