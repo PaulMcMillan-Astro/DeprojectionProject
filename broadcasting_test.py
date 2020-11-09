@@ -1,4 +1,5 @@
 from Deproject_v1_0 import KvalsBlockMethod, KvalsNumpyMethod
+from memory_debugger import kvals_block_method_new
 import pickle
 import numpy as np
 
@@ -14,6 +15,7 @@ old_out.update((label, item.toarray()) for label, item in old_out.items())
 new_out = {'numpy' : KvalsNumpyMethod(var['pvals'], var['rhat'], var['vmin'], var['dv'], var['n']).toarray(),
            'block' : KvalsBlockMethod(var['pvals'], var['rhat'], var['vmin'], var['dv'], var['n'], var['Nblock']).toarray()
             }
+
 
 
 def test_kvals():

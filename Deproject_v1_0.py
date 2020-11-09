@@ -772,43 +772,36 @@ def KvalsNumpyMethod(pvals, rhatvals, vmin, dv, n):
 
 # 
 #@profile
-def KvalsBlockMethod(pvals, rhatvals, vmin, dv, n, Nblock):
-    nx, ny, nz = n
-    N = len(pvals)
-
-    Kvals_block = np.zeros((Nblock, nx * ny * nz))
-    print("Kvals_block size: ", getsize(Kvals_block)/1e9, "GB")
+def KvalsBlockMethod(pvals, rhat, vmin, dv, n, nblock):
+    n_stars = len(pvals)
+    kvals_block = np.zeros((nblock, np.prod(n)))
+    kvals_block_shape = kvals_block.shape
+    last_block = (n_stars % nblock)
+    
+    print("Kvals_block size: ", getsize(kvals_block)/1e9, "GB")
     print("Available RAM: ", psutil.virtual_memory().available/1e9, "GB")
-    ### Creating the first Kvals block to stack onto   
-    for i in range(Nblock):
-        K = np.ravel(calc_K(pvals[i], rhatvals[i], vmin, dv, n))
-        Kvals_block[i] = K
-
-    Kvals = scisp.coo_matrix(Kvals_block)
-
-    ### Running the rest of the blocks up to N
-    BlockLen = (int(np.floor(N / Nblock)) * [Nblock]) + [N % Nblock]
-    BL = 1
     
-    Kvals_block = np.zeros((BlockLen[BL], nx * ny * nz))
+    # Run kvals for for all the blocks and stacking them sparsely after n_stars.
+    kvals = None 
+    for i in range(n_stars - last_block):     
+        kvals_block[i % nblock] = np.ravel(calc_K(pvals[i], rhat[i], vmin, dv, n))
 
-    for i in range(Nblock, N):
-
-        K = np.ravel(calc_K(pvals[i], rhatvals[i], vmin, dv, n))
-        Kvals_block[i % Nblock] = K
-
-        if (i + 1) % Nblock == 0:
-            Kvals_coo = scisp.coo_matrix(Kvals_block)
-            Kvals = scisp.vstack((Kvals, Kvals_coo))
-            BL += 1
-            Kvals_block = np.zeros((BlockLen[BL], nx * ny * nz))
-
-    ### Performing the final stack
-    Kvals_coo = scisp.coo_matrix(Kvals_block)
-    Kvals = scisp.vstack((Kvals, Kvals_coo))
-    Kvals = scisp.csc_matrix(Kvals)
+        if (i + 1) % nblock == 0:
+            kvals_coo = scisp.coo_matrix(kvals_block)
+            kvals = scisp.vstack((kvals, kvals_coo))
+            del kvals_block
+            kvals_block = np.zeros(kvals_block_shape)
+       
+    kvals_block = np.zeros((last_block, np.prod(n))) 
+    for i in range(last_block):
+        kvals_block[i] = np.ravel(calc_K(pvals[i], rhat[i], vmin, dv, n))
+        
+    # Performing the final stack
+    kvals_coo = scisp.coo_matrix(kvals_block)
+    kvals = scisp.vstack((kvals, kvals_coo))
+    kvals = scisp.csc_matrix(kvals)
     
-    return (Kvals)
+    return kvals
 
 
 #@profile
