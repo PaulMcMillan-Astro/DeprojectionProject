@@ -96,7 +96,7 @@ def plot_fv(phi,plane,vmin,dv,n,folder,logging=0):
     im = ax.contourf(X,Y,twodfv.T,40,origin='lower',cmap = plt.cm.get_cmap('bone_r'),linestyles='solid')
     ax.contour(X,Y,twodfv.T,10,origin='lower',colors='k',linewidths=0.5)
     
-    cb = plt.colorbar(im,orientation='vertical', extend='max')
+    cb = plt.colorbar(im,orientation='vertical')
     plt.setp(cb.ax.get_yticklabels(), visible=False)
     cb.set_label('Number density of stars',size='large')
     

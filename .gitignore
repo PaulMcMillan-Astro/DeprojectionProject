@@ -24,3 +24,6 @@ DanielsTesting.ipynb
 fil-result/
 memory_profiler.log
 *.log
+*.votable
+memory_debugger.py
+runs.sh

@@ -4,6 +4,7 @@ from Deproject_v1_0 import *
 from Deproject_oa_scripts import *
 import time
 from astropy.io.ascii import read as tableread
+from astropy.table import QTable
 from datetime import date
 import builtins
 import string
@@ -124,23 +125,30 @@ alpha = float(vars_[8][0])
 datafile = vars_[9][0].rstrip('\n')
 logging = bool(int(vars_[10][0]))
 
+os.chdir("DATA/")
 
-try:
-    os.chdir("DATA/")
-except FileNotFoundError:
-    print('Edit your desired path in the script')
-data_raw = tableread(str(datafile))
-dist = 1000/data_raw['parallax']*u.pc        
-RA = (data_raw['ra']*u.degree)
-DEC = (data_raw['dec']*u.degree)
-plx = (data_raw['parallax']*u.mas)
-pm_RA = (data_raw['pmra']*u.mas/u.yr)
-pm_DEC = (data_raw['pmdec']*u.mas/u.yr)
-print("Sample has " + str(len(dist)) + " stars\n")
+if datafile[-4:] == '.vot':
+    data_raw = QTable.read(datafile, format='votable')
+    dist = data_raw['dist']      
+    RA = data_raw['ra']
+    DEC = data_raw['dec']
+    plx = data_raw['parallax']
+    pm_RA = data_raw['pmra']
+    pm_DEC = data_raw['pmdec']
+else:
+    data_raw = tableread(datafile)
+    dist = 1000/data_raw['parallax']*u.pc        
+    RA = (data_raw['ra']*u.degree)
+    DEC = (data_raw['dec']*u.degree)
+    plx = (data_raw['parallax']*u.mas)
+    pm_RA = (data_raw['pmra']*u.mas/u.yr)
+    pm_DEC = (data_raw['pmdec']*u.mas/u.yr)
+    
+print(f'Sample has {len(data_raw)} stars\n')
 
 
 
-sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC,distance=dist)
+sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC, distance=dist)
 
 sample = sample_icrs.transform_to(coord.Galactic)
 
