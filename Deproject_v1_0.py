@@ -497,7 +497,7 @@ def phi_guess(v0, disp0, vmin, dv, n):
     fA = st.multivariate_normal(mean=v0, cov=np.diag(dispA**2))
     fB = st.multivariate_normal(mean=v0, cov=np.diag(dispB**2))
     
-    phi = np.log10((fA.pdf(pos) + fB.pdf(pos))/2)
+    phi = np.log((fA.pdf(pos) + fB.pdf(pos))/2)
     
     
     return phi
