@@ -66,6 +66,28 @@ def multigrid_steps(n):
     return box_steps.astype(int)
 
 #@profile
+
+builtins.variables = dict()
+def update_variables(loc, glob):
+    loc_vars = list(loc.keys())
+    glob_vars = list(glob.keys())
+    all_vars = list(set(loc_vars) | set(glob_vars))
+    
+    for var in all_vars:
+        try:
+            builtins.variables[var] = sys.getsizeof(glob[var])/1e6
+        except KeyError:
+            builtins.variables[var] = sys.getsizeof(loc[var])/1e6
+            
+    variable_list = sorted([(name, value) for (name, value) in builtins.variables.items()],
+                          key=lambda x: x[1],
+                          reverse=True)
+    os.system('clear')
+    print('-'*60)
+    [print(var, ':', size, 'MiB') for var, size in variable_list[:3]]
+    return
+    
+
 def write_variables():
     cwd = os.getcwd()
     os.chdir('/home/daniel/DeprojectionProject')
@@ -296,20 +318,17 @@ def calc_K(pk, rhat, vmin, dv, n):
         return K
 
     vr_prime = (vr[:-1] + vr[1:]) / 2
-
-    pks = np.zeros((len(vr_prime), len(pk)))
-    pks[:] = pk
-    rhats = np.zeros((len(vr_prime), len(rhat)))
-    rhats[:] = rhat
-    vmins = np.zeros((len(vr_prime), len(vmin)))
-    vmins[:] = vmin
-    vr_primestack = np.ones((len(vr_prime), 3))
-    vr_primestack *= vr_prime[:, None]
+    pks = np.ones((len(vr_prime), len(pk))) * pk[np.newaxis]
+    rhats = np.ones((len(vr_prime), len(rhat))) * rhat[np.newaxis]
+    vmins = np.ones((len(vr_prime), len(vmin))) * vmin[np.newaxis]
+    vr_primestack = np.ones((len(vr_prime), 3))*vr_prime[:, np.newaxis]
 
     """We now solve the line equation again for values in the middle of each bin with a line segment in it.
     This gives us the coordinates for each relevant bin, given in line_bins.
     Finally we compute the length of each segment and add said value to the relevant box in our K-space."""
+    
     v_prime = pks + vr_primestack * rhats
+
     line_bins = np.floor((v_prime - vmins) / dv)
     line_bins = line_bins.astype(int)
 
@@ -343,9 +362,12 @@ def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
     # Create N_star identity matrices
     A0 = np.identity(3) * np.expand_dims(np.ones(rhat.shape[:-1]), axis=(-1, -2))
     A = A0 - rhat_outer
+    del rhat_outer
+
 
     A_mean_inv = np.linalg.inv(A.mean(axis=-3))
     v_mean = np.einsum('...ij,...j->...i', A_mean_inv, pmean)
+    del A_mean_inv
 
     # Computes p' from equation (6) in DB98
     pp = pvals - np.einsum('...ikj,...j->...ik', A, v_mean)
@@ -358,12 +380,14 @@ def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
         # p' with itself.
 
         B = np.mean(np.expand_dims(pp, axis=-1) * np.expand_dims(pp, axis=-2), axis=-3)
+        del pp
         # Next, we use the tensordot function of numpy to obtain T for each star.
         # We resort to a simple list comprehension operation to obtain these
         # values
 
         # We could alternatively use np.einsum here
         T = np.asarray(np.einsum('...ij,...kl->...ijlk', A, A)).mean(axis=-5)
+        del A
 
         # With the non-singular A tensor at hand we can easily solve for D
         # and obtain the velocity dispersion tensor
@@ -371,14 +395,15 @@ def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
         if T.ndim == 5:
 
             D = np.array([np.linalg.tensorsolve(t, b, (0, 2)) for t, b in zip(T, B)])
-
+            del T, B
         else:
 
-            D = np.linalg.tensorsolve(T, B)
-
+            D = np.linalg.tensorsolve(T, B, (0, 2))
+            del T, B
         sigma2 = np.diagonal(D, axis1=-2, axis2=-1)
 
     else:
+        del pp
 
         B = np.array([[9, -1, -1], [-1, 9, -1], [-1, -1, 9]])
 
@@ -452,7 +477,6 @@ def grad_sec_der(phi, sigma2, dv):
     phi_arr[:,:,2:]   += 2 * (phi_arr_loc[:,:,1:-1]) * sigma2[2]/(dv[2]*dv[2]) # Adds A_(m+1) contribution
     phi_arr[:,:,1:-1] -= 4 * (phi_arr_loc[:,:,1:-1]) * sigma2[2]/(dv[2]*dv[2]) # Adds A_m contribution
 
-
     return phi_arr
 
 #
@@ -479,9 +503,9 @@ def phi_guess(v0, disp0, vmin, dv, n):
 
     vxmax, vymax, vzmax = vxmin + nx * dvx, vymin + ny * dvy, vzmin + nz * dvz
 
-    vx_bins = np.arange(vxmin, vxmax + dvx, dvx)
-    vy_bins = np.arange(vymin, vymax + dvy, dvy)
-    vz_bins = np.arange(vzmin, vzmax + dvz, dvz)
+    vx_bins = np.linspace(vxmin, vxmax, nx+1)
+    vy_bins = np.linspace(vymin, vymax, ny+1)
+    vz_bins = np.linspace(vzmin, vzmax, nz+1)
 
     vxc = (vx_bins[1:] + vx_bins[:-1]) / 2
     vyc = (vy_bins[1:] + vy_bins[:-1]) / 2
@@ -495,7 +519,6 @@ def phi_guess(v0, disp0, vmin, dv, n):
     fB = st.multivariate_normal(mean=v0, cov=np.diag(dispB**2))
 
     phi = np.log((fA.pdf(pos) + fB.pdf(pos))/2)
-
 
     return phi
 
@@ -673,7 +696,7 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
     builtins.L     = [[] for _ in range(len(box_steps))]
     builtins.gradL = [[] for _ in range(len(box_steps))]
     fmin_it = 0
-    for grid_step,n in enumerate(box_steps):
+    for grid_step, n in enumerate(box_steps):
         if grid_step == len(box_steps)-1:
             printing = True
         builtins.grid_step = grid_step
@@ -683,6 +706,7 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
         Kvals = Kvals_function_selector(Kvals_args)
 
         args = (Kvals, N, alpha, dv, n, sigma2)
+
         phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
 
         ### This is where the minimization occurs
@@ -718,8 +742,8 @@ def Kvals_function_selector(args):
 
     pvals, rhatvals, vmin, dv, n, N, printing = args
 
-    # We allow only 90% of the available RAM to be used to allow other processes to run simulataneously.
-    AvMem = psutil.virtual_memory().available*0.9
+    # We allow only 80% of the available RAM to be used to allow other processes to run simulataneously.
+    AvMem = psutil.virtual_memory().available*0.8
 
     MaxFloats = AvMem / 8  # Number of floats we can handle assuming 8 bytes per float
     Nblock = int(np.floor(MaxFloats / np.prod(n)))  # Largest possible block size
@@ -727,7 +751,6 @@ def Kvals_function_selector(args):
     AvMem /= 1e9
     if printing == True:
         print('Allocated RAM: %.2f GB  \nRequired RAM : %.2f GB | Block size = %s' % (AvMem, MemReq, Nblock))
-    print('Allocated RAM: %.2f GB  \nRequired RAM : %.2f GB | Block size = %s' % (AvMem, MemReq, Nblock))
 
     if Nblock > N:
         if printing == True:
@@ -1280,9 +1303,9 @@ def read_params(sample, vmin, dv, n):
 
     vxmax, vymax, vzmax = vxmin + nx * dvx, vymin + ny * dvy, vzmin + nz * dvz
 
-    vx_bins = np.arange(vxmin, vxmax + dvx, dvx)
-    vy_bins = np.arange(vymin, vymax + dvy, dvy)  # Bin-edges
-    vz_bins = np.arange(vzmin, vzmax + dvz, dvz)
+    vx_bins = np.linspace(vxmin, vxmax, nx+1)
+    vy_bins = np.linspace(vymin, vymax, ny+1)
+    vz_bins = np.linspace(vzmin, vzmax, nz+1)
 
     vxc = (vx_bins[1:] + vx_bins[:-1]) / 2
     vyc = (vy_bins[1:] + vy_bins[:-1]) / 2

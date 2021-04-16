@@ -12,7 +12,8 @@ import inspect
 from termcolor import colored
 from Deproject_test import sanity_check
 import matplotlib
-from memory_profiler import LogFile
+#from memory_profiler import LogFile
+
 matplotlib.use('TkAgg')
 from Deproject_plots import plot_fv, plot_L_and_dL, DM_plt_prefs
 DM_plt_prefs()
@@ -153,6 +154,7 @@ sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_D
 sample = sample_icrs.transform_to(coord.Galactic)
 
 pvals, rhatvals = calc_p_rhat(sample) 
+pvals = pvals.value
 
 if use_guess:
     mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n ,v0_guess=v_guess, disp_guess=disp_guess, noniso=non_iso)
