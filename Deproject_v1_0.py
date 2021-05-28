@@ -72,13 +72,13 @@ def update_variables(loc, glob):
     loc_vars = list(loc.keys())
     glob_vars = list(glob.keys())
     all_vars = list(set(loc_vars) | set(glob_vars))
-    
+
     for var in all_vars:
         try:
             builtins.variables[var] = sys.getsizeof(glob[var])/1e6
         except KeyError:
             builtins.variables[var] = sys.getsizeof(loc[var])/1e6
-            
+
     variable_list = sorted([(name, value) for (name, value) in builtins.variables.items()],
                           key=lambda x: x[1],
                           reverse=True)
@@ -86,7 +86,7 @@ def update_variables(loc, glob):
     print('-'*60)
     [print(var, ':', size, 'MiB') for var, size in variable_list[:3]]
     return
-    
+
 
 def write_variables():
     cwd = os.getcwd()
@@ -326,7 +326,7 @@ def calc_K(pk, rhat, vmin, dv, n):
     """We now solve the line equation again for values in the middle of each bin with a line segment in it.
     This gives us the coordinates for each relevant bin, given in line_bins.
     Finally we compute the length of each segment and add said value to the relevant box in our K-space."""
-    
+
     v_prime = pks + vr_primestack * rhats
 
     line_bins = np.floor((v_prime - vmins) / dv)
@@ -353,7 +353,6 @@ def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
     give_vmean: if True, returns the computed mean velocity vector value for the given sample
     noniso: if True, we no longer assume that the sample is isotropic"""
 
-    # pmean = pvals.mean(axis=0)
     pmean = pvals.mean(axis=-2)
 
     # Fast way for outer product eq (4) of DB98

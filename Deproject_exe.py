@@ -18,8 +18,8 @@ matplotlib.use('TkAgg')
 from Deproject_plots import plot_fv, plot_L_and_dL, DM_plt_prefs
 DM_plt_prefs()
 """Script that when called by Python in terminal will perform the computations needed
-to run a maximisation scheme. It will also allow you to plot the results and the 
-change in L & dL over all iterations. 
+to run a maximisation scheme. It will also allow you to plot the results and the
+change in L & dL over all iterations.
 
 If provided the file 'vars.ini' as an argument such that the terminal command is
 'python Deproject_exe.py -i vars.ini' it will read the input variables automatically"""
@@ -53,7 +53,15 @@ optional.add_argument("-f",
                     choices=['max_L', 'multigrid_max_L'],
                     help='Select PMLE scheme [default : multigrid_max_L]',
                     metavar='func')
-                
+
+optional.add_argument("-b",
+                    default='0',
+                    const='0',
+                    nargs='?',
+                    choices=['1', '0'],
+                    help='Whether or not to resample the parallax and proper motions',
+                    metavar='bool')
+
 args = parser.parse_args()
 
 if args.f == 'max_L':
@@ -63,14 +71,14 @@ elif args.f == 'multigrid_max_L':
     # from Deproject_v1_0 import multigrid_max_L as max_func
     from Deproject_oa_scripts import multigrid_max_L as max_func
 
-    
+
 # Function that creates a non-existing folder to store output data
 def make_folder():
-    '''Function that writes a folder with name YYYY-MM-DDx where x 
+    '''Function that writes a folder with name YYYY-MM-DDx where x
     is the first letter that is a non-existing directory'''
     alp = string.ascii_lowercase
     date_str = str(date.today())
-    
+
     list_str = []
     for letter in alp:
         list_str.append(date_str + letter)
@@ -91,9 +99,20 @@ def make_folder():
 
     folder_name=list_str[list_str != existing_dirs][0]
     os.system('mkdir RUNS/' + folder_name)
-                
+
     return folder_name
 
+def resample(plx, pmra, pmdec, plx_err, pmra_err, pmdec_err, plx_pmra_corr, plx_pmdec_corr, pmra_pmdec_corr):
+    '''Use the uncertainties and correlations between plx, pmra, pmdec to resample the values.'''
+    rng = np.random.default_rng()
+    for i in range(len(plx)):
+        mean = [plx[i].value, pmra[i].value, pmra[i].value]
+        cov = np.array([[plx_err[i].value**2, plx_pmra_corr[i], plx_pmdec_corr[i]],
+                       [plx_pmra_corr[i], pmra_err[i].value**2, pmra_pmdec_corr[i]],
+                       [plx_pmdec_corr[i], pmra_pmdec_corr[i], pmdec_err.value[i]**2]])
+
+        plx[i], pm_RA[i], pm_DEC[i] = rng.multivariate_normal(mean, cov)*np.array([plx.unit, pmra.unit, pmdec.unit])
+    return plx, pmra, pmdec
 
 ##########You will need to change the directory path to your data#################
 ti_a = time.time()
@@ -109,7 +128,7 @@ def process_input(file_): #Function that reads the input file if any
         else:
             h_file.append(line.split('\t'))
     return h_file
-        
+
 
 # Read the input file
 guessfile = args.i #The vars.ini file
@@ -130,21 +149,30 @@ os.chdir("DATA/")
 
 if datafile[-4:] == '.vot':
     data_raw = QTable.read(datafile, format='votable')
-    dist = data_raw['dist']      
+    dist = data_raw['dist']
     RA = data_raw['ra']
     DEC = data_raw['dec']
     plx = data_raw['parallax']
     pm_RA = data_raw['pmra']
     pm_DEC = data_raw['pmdec']
+    if b:
+        plx_err = data_raw['parallax_error']
+        pm_RA_err = data_raw['pmra_error']
+        pm_DEC_err = data_raw['pmdec_error']
+        plx_pmra_corr = data_raw['parallax_pmra_corr']
+        plx_pmdec_corr = data_raw['parallax_pmdec_corr']
+        pmra_pmdec_corr = data_raw['pmra_pmdec_corr']
+
+        plx, pm_RA, pm_DEC = resample(plx, pm_RA, pm_DEC, plx_err, pm_RA_err, pm_DEC_err, plx_pmra_corr, plx_pmdec_corr, pmra_pmdec_corr)
 else:
     data_raw = tableread(datafile)
-    dist = 1000/data_raw['parallax']*u.pc        
+    dist = 1000/data_raw['parallax']*u.pc
     RA = (data_raw['ra']*u.degree)
     DEC = (data_raw['dec']*u.degree)
     plx = (data_raw['parallax']*u.mas)
     pm_RA = (data_raw['pmra']*u.mas/u.yr)
     pm_DEC = (data_raw['pmdec']*u.mas/u.yr)
-    
+
 print(f'Sample has {len(data_raw)} stars\n')
 
 
@@ -153,7 +181,7 @@ sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_D
 
 sample = sample_icrs.transform_to(coord.Galactic)
 
-pvals, rhatvals = calc_p_rhat(sample) 
+pvals, rhatvals = calc_p_rhat(sample)
 pvals = pvals.value
 
 if use_guess:
@@ -172,7 +200,7 @@ if logging:
     os.chdir('/home/daniel/DeprojectionProject')
     folder = make_folder()
     np.save('RUNS/' + folder + '/mxl_data',mxl)
-    
+
     # Save output
     # RUNS folder identifier
     with open('logs/log_dir_identifier.txt', 'a') as logfile:
@@ -181,55 +209,55 @@ if logging:
             logfile.write('\n' + mark*120 + '\n')
             logfile.write(mark*55 + folder[:10] + mark*55 + '\n')
             logfile.write(mark*120 + '\n')
-            
+
         logfile.write('\nFolder name : ' + folder + '\n')
         logfile.write('Datafile    : ' + datafile + '\n')
         logfile.write('fmin its    : ' + str(fmin_it) + '\n')
         logfile.write('Time needed : ' + str(endtime/60) + ' mins\n')
-        
-    # Logfile in RUNS folder 
+
+    # Logfile in RUNS folder
     with open('RUNS/' + folder + '/log.txt', 'a') as logfile:
         logfile.write('Datafile    : ' + datafile + '\n')
         logfile.write('fmin its    : ' + str(fmin_it) + '\n')
         logfile.write('Time needed : ' + str(endtime/60) + ' mins\n')
-        logfile.write('Labels      : Nbins[1x3], vmin[1x3], bin size, use_guess, noniso, mu_guess, sigma_guess, alpha\n')    
+        logfile.write('Labels      : Nbins[1x3], vmin[1x3], bin size, use_guess, noniso, mu_guess, sigma_guess, alpha\n')
         value_string=str((str(list(n)).replace(",",":").replace(":",""),str(list(vmin)).replace(",",":").replace(":","")
                           ,str(list(dv)).replace(",",":").replace(":",""),use_guess,non_iso,str(list(v_guess)).replace(",",":").replace(":","")
                           , str(list(disp_guess)).replace(",",":").replace(":",""), alpha)).replace("'","")[1:-1]
-        
+
         logfile.write("Values      : " + value_string + '\n')
-        
+
     # MORE IS SAVE BY SANITY_CHECK()
 else:
     folder = ''
-        
+
 builtins.autoplot = bool(int(args.a))
 if not autoplot:
     sane = input('Do you want to perform a sanity check [y/n]? ')
-    while sane != 'y' and sane != 'n':   
+    while sane != 'y' and sane != 'n':
         sane = input('Incorrect entry, try again [y/n]! ')
-    
+
     if sane == 'y':
-        
+
         from Deproject_test import sanity_check
-        
+
         sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging)
-    
+
     elif sane == 'n':
-        
+
         print('Suit yourself')
-        
+
     shouldiplot = input('Do you want to plot your results [y/n]? ')
-    while shouldiplot != 'y' and shouldiplot != 'n':   
+    while shouldiplot != 'y' and shouldiplot != 'n':
         shouldiplot = input('Incorrect entry, try again [y/n]! ')
-    
+
     if shouldiplot == 'y':
         from Deproject_plots import plot_fv,plot_L_and_dL
-        
+
         plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n,folder,logging)
-        
+
         s=0
-        
+
         while True:
             if s==2:
                 break
@@ -240,19 +268,19 @@ if not autoplot:
                 continue
             else:
                 break
-    
+
     shouldiplotL = input('Do you want to plot the change in L and dL during the maximisation [y/n]? ')
-    while shouldiplotL != 'y' and shouldiplotL != 'n':   
+    while shouldiplotL != 'y' and shouldiplotL != 'n':
         shouldiplotL = input('Incorrect entry, try again [y/n]! ')
-    
+
     if shouldiplotL=='y':
         plot_L_and_dL(folder,logging)
-        
+
 else:
     #sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
-    plot_fv(mxl,'xy',vmin,dv,n,folder,logging)  
-    plot_fv(mxl,'yz',vmin,dv,n,folder,logging)  
-    plot_fv(mxl,'xz',vmin,dv,n,folder,logging)    
+    plot_fv(mxl,'xy',vmin,dv,n,folder,logging)
+    plot_fv(mxl,'yz',vmin,dv,n,folder,logging)
+    plot_fv(mxl,'xz',vmin,dv,n,folder,logging)
     plot_L_and_dL(folder, logging)
 
 print('My work here is done')
