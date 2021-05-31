@@ -105,13 +105,26 @@ def make_folder():
 def resample(plx, pmra, pmdec, plx_err, pmra_err, pmdec_err, plx_pmra_corr, plx_pmdec_corr, pmra_pmdec_corr):
     '''Use the uncertainties and correlations between plx, pmra, pmdec to resample the values.'''
     rng = np.random.default_rng()
-    for i in range(len(plx)):
-        mean = [plx[i].value, pmra[i].value, pmra[i].value]
-        cov = np.array([[plx_err[i].value**2, plx_pmra_corr[i], plx_pmdec_corr[i]],
-                       [plx_pmra_corr[i], pmra_err[i].value**2, pmra_pmdec_corr[i]],
-                       [plx_pmdec_corr[i], pmra_pmdec_corr[i], pmdec_err.value[i]**2]])
 
-        plx[i], pm_RA[i], pm_DEC[i] = rng.multivariate_normal(mean, cov)*np.array([plx.unit, pmra.unit, pmdec.unit])
+    plx_err = plx_err.value
+    pmra_err = pmra_err.value
+    pmdec_err = pmdec_err.value
+
+    for i in range(len(plx)):
+        mean = [plx[i].value, pmra[i].value, pmdec[i].value]
+        cov = np.array([
+                       [plx_err[i]**2,
+                        plx_pmra_corr[i]*plx_err[i]*pmra_err[i],
+                        plx_pmdec_corr[i]*plx_err[i]*pmdec_err[i]],
+                       [plx_pmra_corr[i]*plx_err[i]*pmra_err[i],
+                        pmra_err[i]**2,
+                        pmra_pmdec_corr[i]*pmra_err[i]*pmdec_err[i]],
+                       [plx_pmdec_corr[i]*plx_err[i]*pmdec_err[i],
+                        pmra_pmdec_corr[i]*pmra_err[i]*pmdec_err[i],
+                        pmdec_err[i]**2]
+                       ])
+
+        plx[i], pmra[i], pmdec[i] = rng.multivariate_normal(mean, cov)*np.array([plx.unit, pmra.unit, pmdec.unit])
     return plx, pmra, pmdec
 
 ##########You will need to change the directory path to your data#################
@@ -177,7 +190,7 @@ print(f'Sample has {len(data_raw)} stars\n')
 
 
 
-sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC, distance=dist)
+sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC, distance=coord.Distance(parallax=plx))
 
 sample = sample_icrs.transform_to(coord.Galactic)
 
