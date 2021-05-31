@@ -168,7 +168,7 @@ if datafile[-4:] == '.vot':
     plx = data_raw['parallax']
     pm_RA = data_raw['pmra']
     pm_DEC = data_raw['pmdec']
-    if b:
+    if bool(int(args.b)):
         plx_err = data_raw['parallax_error']
         pm_RA_err = data_raw['pmra_error']
         pm_DEC_err = data_raw['pmdec_error']
