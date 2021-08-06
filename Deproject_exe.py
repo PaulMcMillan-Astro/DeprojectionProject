@@ -5,6 +5,7 @@ from Deproject_oa_scripts import *
 import time
 from astropy.io.ascii import read as tableread
 from astropy.table import QTable
+from astropy.stats import bootstrap
 from datetime import date
 import builtins
 import string
