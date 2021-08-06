@@ -62,6 +62,14 @@ optional.add_argument("-b",
                     help='Whether or not to resample the parallax and proper motions',
                     metavar='bool')
 
+optional.add_argument("-bs",
+                    default='0',
+                    const='0',
+                    nargs='?',
+                    choices=['1', '0'],
+                    help='Whether or not to bootstrap pvals and rhatvals',
+                    metavar='bool')
+
 args = parser.parse_args()
 
 if args.f == 'max_L':
@@ -126,6 +134,10 @@ def resample(plx, pmra, pmdec, plx_err, pmra_err, pmdec_err, plx_pmra_corr, plx_
 
         plx[i], pmra[i], pmdec[i] = rng.multivariate_normal(mean, cov)*np.array([plx.unit, pmra.unit, pmdec.unit])
     return plx, pmra, pmdec
+
+def bootstrap_sample(pvals, rhatvals):
+    pvals, rhatvals = bootstrap(np.dstack([pvals, rhatvals]), bootnum=1).transpose(3, 0, 1, 2)
+    return np.squeeze(pvals), np.squeeze(rhatvals)
 
 ##########You will need to change the directory path to your data#################
 ti_a = time.time()
@@ -196,6 +208,8 @@ sample = sample_icrs.transform_to(coord.Galactic)
 
 pvals, rhatvals = calc_p_rhat(sample)
 pvals = pvals.value
+if bool(int(args.bs)):
+    pvals, rhatvals = bootstrap_sample(pvals, rhatvals)
 
 if use_guess:
     mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n ,v0_guess=v_guess, disp_guess=disp_guess, noniso=non_iso)
