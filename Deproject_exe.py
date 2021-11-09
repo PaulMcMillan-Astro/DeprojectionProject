@@ -141,8 +141,8 @@ def bootstrap_sample(pvals, rhatvals):
     return np.squeeze(pvals), np.squeeze(rhatvals)
 
 ##########You will need to change the directory path to your data#################
-ti_a = time.time()
-
+ti = time.time()
+builtins.ti = ti
 def process_input(file_): #Function that reads the input file if any
     h_file = []
     input_ = open(file_, 'r')
@@ -216,8 +216,8 @@ if use_guess:
     mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n ,v0_guess=v_guess, disp_guess=disp_guess, noniso=non_iso)
 elif not use_guess:
     mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n, noniso=non_iso)
-tf_a = time.time()
-endtime = (tf_a - ti_a)/60
+tf = time.time()
+endtime = (tf - builtins.ti)/60
 print("\nThe run took: ", endtime, 'mins')
 
 n = builtins.n
