@@ -1,7 +1,6 @@
 import os
 os.chdir('/home/daniel/DeprojectionProject')
 from Deproject_v1_0 import *
-from Deproject_oa_scripts import *
 import time
 from astropy.io.ascii import read as tableread
 from astropy.table import QTable
@@ -74,11 +73,9 @@ optional.add_argument("-bs",
 args = parser.parse_args()
 
 if args.f == 'max_L':
-    #from Deproject_v1_0 import max_L as max_func
-    from Deproject_oa_scripts import max_L_oa as max_func
+    from Deproject_v1_0 import max_L as max_func
 elif args.f == 'multigrid_max_L':
-    # from Deproject_v1_0 import multigrid_max_L as max_func
-    from Deproject_oa_scripts import multigrid_max_L as max_func
+    from Deproject_v1_0 import multigrid_max_L as max_func
 
 
 # Function that creates a non-existing folder to store output data
@@ -241,13 +238,13 @@ if logging:
         logfile.write('\nFolder name : ' + folder + '\n')
         logfile.write('Datafile    : ' + datafile + '\n')
         logfile.write('fmin its    : ' + str(fmin_it) + '\n')
-        logfile.write('Time needed : ' + str(endtime/60) + ' mins\n')
+        logfile.write('Time needed : ' + str(endtime/60) + ' hrs\n')
 
     # Logfile in RUNS folder
     with open('RUNS/' + folder + '/log.txt', 'a') as logfile:
         logfile.write('Datafile    : ' + datafile + '\n')
         logfile.write('fmin its    : ' + str(fmin_it) + '\n')
-        logfile.write('Time needed : ' + str(endtime/60) + ' mins\n')
+        logfile.write('Time needed : ' + str(endtime/60) + ' hrs\n')
         logfile.write('Labels      : Nbins[1x3], vmin[1x3], bin size, use_guess, noniso, mu_guess, sigma_guess, alpha\n')
         value_string=str((str(list(n)).replace(",",":").replace(":",""),str(list(vmin)).replace(",",":").replace(":","")
                           ,str(list(dv)).replace(",",":").replace(":",""),use_guess,non_iso,str(list(v_guess)).replace(",",":").replace(":","")
