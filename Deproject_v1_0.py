@@ -15,7 +15,7 @@ from termcolor import colored
 from astropy.table import Table
 from astropy.io import ascii
 from scipy import sparse as scisp
-from scipy.optimize import fmin_cg
+from scipy.optimize import fmin_cg, minimize
 from scipy.interpolate import interpn
 from scipy.ndimage import zoom
 from datetime import date
@@ -181,7 +181,7 @@ def calc_p_rhat(sample):
         mub_obs = sample['pmb'].to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
         p = sample['parallax'].to(u.kpc, equivalencies=u.parallax())
 
-    elif isinstance(sample, coord.builtin_frames.galactic.Galactic):
+    elif isinstance(sample, coord.builtin_frames.galactic.Galactic) or isinstance(sample, coord.sky_coordinate.SkyCoord):
         b = sample.b
         l = sample.l
         mul_obs = sample.pm_l_cosb.to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
@@ -273,70 +273,6 @@ def model_sample(N):
     return psample, psvx, psvy, psvz
 
 
-def calc_sparse_K(pk, rhat, vmin, dv, n):
-    '''Calculate the values of K simultaneously for all bins for a given star with tangential velocity
-        vector pk and a unit vector rhat'''
-
-    vxmin, vymin, vzmin = vmin
-    dvx, dvy, dvz = dv
-    nx, ny, nz = n
-    pkx, pky, pkz = pk
-    rhatx, rhaty, rhatz = rhat
-
-    vxmax, vymax, vzmax = vxmin + nx * dvx, vymin + ny * dvy, vzmin + nz * dvz
-
-    """We now solve the line equation v = pk + vr*rhat, where v are the intersections of the tangential velocity line
-    and the boundaries of each bin"""
-
-    vx_bins = np.linspace(vxmin, vxmax, nx + 1)
-    vy_bins = np.linspace(vymin, vymax, ny + 1)
-    vz_bins = np.linspace(vzmin, vzmax, nz + 1)
-
-    vrx = (vx_bins - pkx) / rhatx
-    vry = (vy_bins - pky) / rhaty
-    vrz = (vz_bins - pkz) / rhatz
-
-    """After solving the line equation for each dim we remove the vr values which solve the equation
-    for bins outside of our specified box."""
-
-    vrmax = min(max(vrx), max(vry), max(vrz))
-    vrmin = max(min(vrx), min(vry), min(vrz))
-
-    vrx = vrx[(vrx <= vrmax) & (vrx >= vrmin)]
-    vry = vry[(vry <= vrmax) & (vry >= vrmin)]
-    vrz = vrz[(vrz <= vrmax) & (vrz >= vrmin)]
-
-    vr = np.concatenate((vrx, vry, vrz))
-    vr.sort()  # We obtain an ordered list with all vr values for intersections between entry and exit points
-    
-    if len(vr) == 0:
-        return 0, 0
-    
-    vr_prime = (vr[:-1] + vr[1:]) / 2
-    pks = np.ones((len(vr_prime), len(pk))) * pk[np.newaxis]
-    rhats = np.ones((len(vr_prime), len(rhat))) * rhat[np.newaxis]
-    vmins = np.ones((len(vr_prime), len(vmin))) * vmin[np.newaxis]
-    vr_primestack = np.ones((len(vr_prime), 3))*vr_prime[:, np.newaxis]
-
-    """We now solve the line equation again for values in the middle of each bin with a line segment in it.
-    This gives us the coordinates for each relevant bin, given in line_bins.
-    Finally we compute the length of each segment and output the multi_index and values."""
-
-    v_prime = pks + vr_primestack * rhats
-
-    line_bins = np.floor((v_prime - vmins) / dv)
-    line_bins = line_bins.astype(int)
-
-    line_len = vr[1:] - vr[:-1]  # Gets the length of each line
-    non_zero = np.nonzero(line_len)
-    line_len = line_len[non_zero]  # Removes duplicate intersections
-    line_bins = line_bins[non_zero].T
-    #line_bins = np.vstack((np.ones(line_bins.shape[0])*i_star, line_bins.T)).astype(int)
-    
-    vals = (line_len / (dvx * dvy * dvz))
-    return np.ravel_multi_index(line_bins, n), vals
-
-
 #@profile
 def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
     """Function that applies equation 12 of DB98 for a set of stars from their tangential velocities and unit vectors.
@@ -410,6 +346,48 @@ def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
 
         return sigma2
 
+#@profile
+def phi_guess(v0, disp0, vmin, dv, n):
+    """Provides an initial guess of the phi values in each bin given an assumed distribution f(v).
+    For now only allows for a sum of two Gaussians type guess given arrays with mean velocities and
+    dispersions for each dimension.
+
+    v0: A vector containing all the mean velocity values for the Gaussian distribution
+
+    disp0: A vector with the velocity dispersions for the Gaussian in x, y, z
+
+    vmin: The anchor point of our velocity space box
+
+    """
+
+    vxmin, vymin, vzmin = vmin
+    dvx, dvy, dvz = dv
+    nx, ny, nz = n
+    v0x, v0y, v0z = v0
+    dispA = disp0
+    dispB = disp0*2
+
+    vxmax, vymax, vzmax = vxmin + nx * dvx, vymin + ny * dvy, vzmin + nz * dvz
+
+    vx_bins = np.linspace(vxmin, vxmax, nx+1)
+    vy_bins = np.linspace(vymin, vymax, ny+1)
+    vz_bins = np.linspace(vzmin, vzmax, nz+1)
+
+    vxc = (vx_bins[1:] + vx_bins[:-1]) / 2
+    vyc = (vy_bins[1:] + vy_bins[:-1]) / 2
+    vzc = (vz_bins[1:] + vz_bins[:-1]) / 2
+
+    """Given the velocities of each bin we compute the 3D Gaussian value."""
+
+    pos = np.stack(np.meshgrid(vxc,vyc,vzc, indexing='ij'),axis=3)
+
+    fA = st.multivariate_normal(mean=v0, cov=np.diag(dispA**2))
+    fB = st.multivariate_normal(mean=v0, cov=np.diag(dispB**2))
+
+    phi = np.log((fA.pdf(pos) + fB.pdf(pos))/2)
+    return phi
+
+
 #
 #@profile
 def sec_der(phi, sigma2, dv):
@@ -472,51 +450,7 @@ def grad_sec_der(phi, sigma2, dv):
 
     return phi_arr
 
-#
-#@profile
-def phi_guess(v0, disp0, vmin, dv, n):
-    """Provides an initial guess of the phi values in each bin given an assumed distribution f(v).
-    For now only allows for a sum of two Gaussians type guess given arrays with mean velocities and
-    dispersions for each dimension.
 
-    v0: A vector containing all the mean velocity values for the Gaussian distribution
-
-    disp0: A vector with the velocity dispersions for the Gaussian in x, y, z
-
-    vmin: The anchor point of our velocity space box
-
-    """
-
-    vxmin, vymin, vzmin = vmin
-    dvx, dvy, dvz = dv
-    nx, ny, nz = n
-    v0x, v0y, v0z = v0
-    dispA = disp0
-    dispB = disp0*2
-
-    vxmax, vymax, vzmax = vxmin + nx * dvx, vymin + ny * dvy, vzmin + nz * dvz
-
-    vx_bins = np.linspace(vxmin, vxmax, nx+1)
-    vy_bins = np.linspace(vymin, vymax, ny+1)
-    vz_bins = np.linspace(vzmin, vzmax, nz+1)
-
-    vxc = (vx_bins[1:] + vx_bins[:-1]) / 2
-    vyc = (vy_bins[1:] + vy_bins[:-1]) / 2
-    vzc = (vz_bins[1:] + vz_bins[:-1]) / 2
-
-    """Given the velocities of each bin we compute the 3D Gaussian value."""
-
-    pos = np.stack(np.meshgrid(vxc,vyc,vzc, indexing='ij'),axis=3)
-
-    fA = st.multivariate_normal(mean=v0, cov=np.diag(dispA**2))
-    fB = st.multivariate_normal(mean=v0, cov=np.diag(dispB**2))
-
-    phi = np.log((fA.pdf(pos) + fB.pdf(pos))/2)
-
-    return phi
-
-
-#
 #@profile
 def get_neg_L(phi, *args):
     """The function that we wish to optimise. Corresponds to eq. 31 in D98.
@@ -549,10 +483,9 @@ def get_neg_L(phi, *args):
     t3 = ((alpha * dv[0] * dv[1] * dv[2]) / 2) * phixhi_sum
 
     L_tilde = t1 - t2 - t3 # eq. 31 in DB98
-
     neg_L = -1 * L_tilde  # Since we want to maximize L_tilde, we should minimize -L_tilde
     builtins.current_L = L_tilde
-
+    print(f'{t1=:.6f}, {t2=:.6f}, {t3=:.6f}')
     return neg_L
 
 
@@ -566,7 +499,6 @@ def get_grad_neg_L(phi, *args):
 
     """
     Kvals, N, alpha, dv, n, sigma2 = args
-
     exphi = np.exp(phi)
 
     Kphi_sum = (Kvals @ exphi.T)
@@ -683,6 +615,8 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
     builtins.L     = [[] for _ in range(len(box_steps))]
     builtins.gradL = [[] for _ in range(len(box_steps))]
     fmin_it = 0
+
+    mxl_dict = {}
     for grid_step, n in enumerate(box_steps):
         if grid_step == len(box_steps)-1:
             printing = True
@@ -693,16 +627,25 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
         Kvals = KvalsSparseMethod(pvals, rhatvals, vmin, dv, n)
 
         args = (Kvals, N, alpha, dv, n, sigma2)
-
+#        plt.figure()
+#        plt.imshow(np.exp(phi0).sum(axis=2).T, origin='lower')
+#        plt.savefig(f'phi_{grid_step}.jpg', format='jpg')
         phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
-
+        
         ### This is where the minimization occurs
         print(f'Started fmin_cg on {(n[0],n[1],n[2])} grid after {(time.time() - builtins.ti)/60:.2f} mins...', end='', flush=True)
         builtins.L[grid_step].append(-1*get_neg_L(phi0r,Kvals, N, alpha, dv, n, sigma2))
         builtins.gradL[grid_step].append(np.linalg.norm(get_grad_neg_L(phi0r,Kvals, N, alpha, dv, n, sigma2)))
+        
+#        mxl, fopt, fcalls, gcalls, flag, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False, full_output=True, callback=callback_mg)
+        optr = minimize(fun=get_neg_L, x0=phi0r, method='CG', jac=get_grad_neg_L, args=args, callback=callback_mg, options={'gtol': 1e-6, 'disp': False, 'return_all': True})
+        print(Kvals.sum(), N, alpha, dv, n, sigma2, sep='\n')
+        mxl, fopt, fcalls, gcalls, flag = optr.x, optr.fun, optr.nfev, optr.njev, optr.status
+        fmin_it += optr.nit
+        print(f'The value of get_neg_L with best estimate is: {get_neg_L(mxl,Kvals, N, alpha, dv, n, sigma2)}')
+#        fmin_it += np.shape(phi_all)[0] - 1
 
-        mxl, fopt, fcalls, gcalls, flag, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False, full_output=True, callback=callback_mg)
-        fmin_it += np.shape(phi_all)[0] - 1
+        mxl_dict['x'.join(n.astype(str))] = mxl.reshape(n)
 
         print(colored('Finished!','green',attrs=['bold','underline']),end='')
         print(' fopt : %s' % fopt)
@@ -718,7 +661,7 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
 
     mxlnew = mxl.reshape(n)
 
-    return mxlnew, fmin_it
+    return mxl_dict, fmin_it
 
 
 #@profile
@@ -739,495 +682,70 @@ def KvalsSparseMethod(pvals, rhat, vmin, dv, n):
         
     return lil.tocsc()
 
-# #@profile
-# def calc_K(pk, rhat, vmin, dv, n):
-#     '''Calculate the values of K simultaneously for all bins for a given star with tangential velocity
-#     vector pk and a unit vector rhat'''
+def calc_sparse_K(pk, rhat, vmin, dv, n):
+    '''Calculate the values of K simultaneously for all bins for a given star with tangential velocity
+        vector pk and a unit vector rhat'''
+
+    vxmin, vymin, vzmin = vmin
+    dvx, dvy, dvz = dv
+    nx, ny, nz = n
+    pkx, pky, pkz = pk
+    rhatx, rhaty, rhatz = rhat
+
+    vxmax, vymax, vzmax = vxmin + nx * dvx, vymin + ny * dvy, vzmin + nz * dvz
+
+    """We now solve the line equation v = pk + vr*rhat, where v are the intersections of the tangential velocity line
+    and the boundaries of each bin"""
+
+    vx_bins = np.linspace(vxmin, vxmax, nx + 1)
+    vy_bins = np.linspace(vymin, vymax, ny + 1)
+    vz_bins = np.linspace(vzmin, vzmax, nz + 1)
+
+    vrx = (vx_bins - pkx) / rhatx
+    vry = (vy_bins - pky) / rhaty
+    vrz = (vz_bins - pkz) / rhatz
+
+    """After solving the line equation for each dim we remove the vr values which solve the equation
+    for bins outside of our specified box."""
+
+    vrmax = min(max(vrx), max(vry), max(vrz))
+    vrmin = max(min(vrx), min(vry), min(vrz))
+
+    vrx = vrx[(vrx <= vrmax) & (vrx >= vrmin)]
+    vry = vry[(vry <= vrmax) & (vry >= vrmin)]
+    vrz = vrz[(vrz <= vrmax) & (vrz >= vrmin)]
+
+    vr = np.concatenate((vrx, vry, vrz))
+    vr.sort()  # We obtain an ordered list with all vr values for intersections between entry and exit points
+    
+    if len(vr) == 0:
+        return 0, 0
+    
+    vr_prime = (vr[:-1] + vr[1:]) / 2
+    pks = np.ones((len(vr_prime), len(pk))) * pk[np.newaxis]
+    rhats = np.ones((len(vr_prime), len(rhat))) * rhat[np.newaxis]
+    vmins = np.ones((len(vr_prime), len(vmin))) * vmin[np.newaxis]
+    vr_primestack = np.ones((len(vr_prime), 3))*vr_prime[:, np.newaxis]
+
+    """We now solve the line equation again for values in the middle of each bin with a line segment in it.
+    This gives us the coordinates for each relevant bin, given in line_bins.
+    Finally we compute the length of each segment and output the multi_index and values."""
+
+    v_prime = pks + vr_primestack * rhats
+
+    line_bins = np.floor((v_prime - vmins) / dv)
+    line_bins = line_bins.astype(int)
+
+    line_len = vr[1:] - vr[:-1]  # Gets the length of each line
+    non_zero = np.nonzero(line_len)
+    line_len = line_len[non_zero]  # Removes duplicate intersections
+    line_bins = line_bins[non_zero].T
+    #line_bins = np.vstack((np.ones(line_bins.shape[0])*i_star, line_bins.T)).astype(int)
+    
+    vals = (line_len / (dvx * dvy * dvz))
+    return np.ravel_multi_index(line_bins, n), vals
 
-#     vxmin, vymin, vzmin = vmin
-#     dvx, dvy, dvz = dv
-#     nx, ny, nz = n
-#     pkx, pky, pkz = pk
-#     rhatx, rhaty, rhatz = rhat
 
-#     vxmax, vymax, vzmax = vxmin + nx * dvx, vymin + ny * dvy, vzmin + nz * dvz
-
-#     """We now solve the line equation v = pk + vr*rhat, where v are the intersections of the tangential velocity line
-#     and the boundaries of each bin"""
-
-#     vx_bins = np.linspace(vxmin, vxmax, nx + 1)
-#     vy_bins = np.linspace(vymin, vymax, ny + 1)
-#     vz_bins = np.linspace(vzmin, vzmax, nz + 1)
-
-#     vrx = (vx_bins - pkx) / rhatx
-#     vry = (vy_bins - pky) / rhaty
-#     vrz = (vz_bins - pkz) / rhatz
-
-#     """After solving the line equation for each dim we remove the vr values which solve the equation
-#     for bins outside of our specified box."""
-
-#     vrmax = min(max(vrx), max(vry), max(vrz))
-#     vrmin = max(min(vrx), min(vry), min(vrz))
-
-#     vrx = vrx[(vrx <= vrmax) & (vrx >= vrmin)]
-#     vry = vry[(vry <= vrmax) & (vry >= vrmin)]
-#     vrz = vrz[(vrz <= vrmax) & (vrz >= vrmin)]
-
-#     vr = np.concatenate((vrx, vry, vrz))
-#     vr.sort()  # We obtain an ordered list with all vr values for intersections between entry and exit points
-
-#     K = np.zeros((nx, ny, nz))
-
-#     if len(vr) == 0:
-
-#         return K
-
-#     vr_prime = (vr[:-1] + vr[1:]) / 2
-#     pks = np.ones((len(vr_prime), len(pk))) * pk[np.newaxis]
-#     rhats = np.ones((len(vr_prime), len(rhat))) * rhat[np.newaxis]
-#     vmins = np.ones((len(vr_prime), len(vmin))) * vmin[np.newaxis]
-#     vr_primestack = np.ones((len(vr_prime), 3))*vr_prime[:, np.newaxis]
-
-#     """We now solve the line equation again for values in the middle of each bin with a line segment in it.
-#     This gives us the coordinates for each relevant bin, given in line_bins.
-#     Finally we compute the length of each segment and add said value to the relevant box in our K-space."""
-
-#     v_prime = pks + vr_primestack * rhats
-
-#     line_bins = np.floor((v_prime - vmins) / dv)
-#     line_bins = line_bins.astype(int)
-
-#     line_len = vr[1:] - vr[:-1]  # Gets the length of each line
-#     non_zero = np.nonzero(line_len)
-#     line_len = line_len[non_zero]  # Removes duplicate intersections
-#     line_bins = line_bins[non_zero]
-
-#     K[line_bins[:, 0], line_bins[:, 1], line_bins[:, 2]] = line_len / (dvx * dvy * dvz)
-
-#     return K
-
-
-# #@profile
-# def Kvals_function_selector(args):
-#     """This function determines if Kvals can be calculated using a faster numpy pre-allocation method or if it
-#     requires a block-step method based on the systems available RAM. The block-step method calculates Kvals for
-#     a block on Nblock stars before making those Kvals sparse, it then proceeds with the next."""
-
-#     pvals, rhatvals, vmin, dv, n, N, printing = args
-
-#     # We allow only 80% of the available RAM to be used to allow other processes to run simulataneously.
-#     AvMem = psutil.virtual_memory().available*0.8
-
-#     MaxFloats = AvMem / 8  # Number of floats we can handle assuming 8 bytes per float
-#     Nblock = int(np.floor(MaxFloats / np.prod(n)))  # Largest possible block size
-#     MemReq = 8*N*np.prod(n)/1e9
-#     AvMem /= 1e9
-#     if printing == True:
-#         print('Allocated RAM: %.2f GB  \nRequired RAM : %.2f GB | Block size = %s' % (AvMem, MemReq, Nblock))
-
-#     if Nblock > N:
-#         if printing == True:
-#             print('Fast Numpy Kvals run possible, running...\n')
-#             Kvals = KvalsNumpyMethod(pvals, rhatvals, vmin, dv, n)
-#             print('Finished kvals.\n')
-#         elif printing == False:
-#             Kvals = KvalsNumpyMethod(pvals, rhatvals, vmin, dv, n)
-#     else:
-#         if printing == True:
-#             print('Slightly slower Block Kvals run needed, running...\n')
-#             Kvals = KvalsBlockMethod(pvals, rhatvals, vmin, dv, n, Nblock)
-#             print('Finished kvals.\n')
-#         elif printing == False:
-#             Kvals = KvalsBlockMethod(pvals, rhatvals, vmin, dv, n, Nblock)
-
-#     return Kvals
-
-
-# #
-# #@profile
-# def KvalsNumpyMethod(pvals, rhatvals, vmin, dv, n):
-#     nx, ny, nz = n
-#     N = len(pvals)
-
-#     K0 = np.ravel(calc_K(pvals[0], rhatvals[0], vmin, dv, n))
-
-
-#     Kvals = np.zeros((N, len(K0)))
-#     Kvals[0] = K0
-
-#     for i in range(1, N):
-#         Kvals[i] = np.ravel(calc_K(pvals[i], rhatvals[i], vmin, dv, n))
-
-#     Kvals = scisp.csc_matrix(Kvals)
-
-#     return Kvals
-
-
-# #
-# #@profile
-# def KvalsBlockMethod(pvals, rhat, vmin, dv, n, nblock):
-#     n_stars = len(pvals)
-#     kvals_block = np.zeros((nblock, np.prod(n)))
-#     kvals_block_shape = kvals_block.shape
-#     last_block = (n_stars % nblock)
-
-#     print("Kvals_block size: ", getsize(kvals_block)/1e9, "GB")
-#     print("Available RAM: ", psutil.virtual_memory().available/1e9, "GB")
-
-#     # Run kvals for for all the blocks and stacking them sparsely after n_stars.
-#     kvals = None
-#     for i in range(n_stars - last_block):
-#         kvals_block[i % nblock] = np.ravel(calc_K(pvals[i], rhat[i], vmin, dv, n))
-
-#         if (i + 1) % nblock == 0:
-#             kvals_coo = scisp.coo_matrix(kvals_block)
-#             kvals = scisp.vstack((kvals, kvals_coo))
-#             del kvals_block
-#             kvals_block = np.zeros(kvals_block_shape)
-
-#     kvals_block = np.zeros((last_block, np.prod(n)))
-#     for i in range(last_block):
-#         kvals_block[i] = np.ravel(calc_K(pvals[i], rhat[i], vmin, dv, n))
-
-#     # Performing the final stack
-#     kvals_coo = scisp.coo_matrix(kvals_block)
-#     kvals = scisp.vstack((kvals, kvals_coo))
-#     kvals = scisp.csc_matrix(kvals)
-
-#     return kvals
-
-
-# #@profile
-# def opt_alpha_gss(stdscr, alpha0, M, N, sample, vmin, dv, n, opt_tol=0.01, mise_tol=0.01, noniso=False):
-#     """Function that finds the optimal value of alpha for a given sample of stars using a golden-section search
-#     algorithm. Given an initial guess of alpha, alpha0, it will draw M samples of size N from the resulting
-#     distribution f(v) computed using max_L. For each sample we perform the maximisation scheme
-#     to find the f(v) distribution for the golden-section four values. They are:
-
-#     x1: Leftmost corner
-#     x2: 2nd leftmost point
-#     x3: 2nd rightmost point
-#     x4: Rightmost point
-
-#     They are specified by the intervals x2-x1:x3-x2:x4-x3 having the intervals widths in ratio 2-g:2g-3:2-g, where g
-#     is the golden ratio. Similarly to a ternary search. if f(x3) < f(x2) the minimum is within x2 to x4 with new range
-#     x1',x2',x3',x4' = x2, x3, ?, x4. If f(x3) > f(x2) the minimum is within x1 to x3 with new range
-#     x1',x2',x3',x4' = x1, ?, x2, x3. We calculate a new x3' or x2' point and estimate f() for it. The new range is
-#     chosen such that the widths follow the previous ratio.
-
-#     The mean integrated square error (MISE) is our f() and the process repeats until the new range limit difference
-#     falls below the mise tolerance, i.e. either |x2 - x4| or |x1 - x3|. At that point the central value (x3 or x2 in
-#     the previous cases) is set as the new guess for alpha0. The process starts over until it finds that
-#     |alpha_0_previous - alpha_0| is below the optimization tolerance when the search concludes.
-
-#     alpha0: The initial guess of alpha
-#     M: The number of samples to compute the MISE for
-#     N: Number of stars in each sample
-#     pvals: Array with the tangential velocity vectors for all the  original stars in our sample
-#     rhatvals: Array with the unit vector for each sample star
-#     vmin: Vector indicating the anchor of v-space
-#     dv: The dims of each cell
-#     n: The dims of our box
-#     mise_tol: The desired logarithmic tolerance for the minimisation scheme. default value is 0.01.
-#     opt_tol: The desired logarithmic tolerance for the optimization scheme. default value is 0.01.
-
-#     """
-#     tree_file = make_treefile()
-#     try:
-#         s = open(tree_file, 'r').read().split('\n')
-#     except FileNotFoundError:
-#         with open(tree_file, 'a') as txt:
-#             txt.write('# Array shape: opt_it x log(alpha) x MISE\n')
-#     else:
-#         os.remove(tree_file)
-#         with open(tree_file, 'a') as txt:
-#             txt.write('# Array shape: opt_it x log(alpha) x MISE\n')
-#         stdscr.addstr(0, 51, ("Found an incomplete tree_file, removed it"),
-#                       curses.color_pair(4) | curses.A_BOLD | curses.A_UNDERLINE)
-#         stdscr.refresh()
-#     ### Preparing counters
-#     ti = time.time()
-
-#     opt_diff = 10
-#     opt_it = 0
-
-#     mise_diff = 10
-#     mise_it = 0
-#     mise_it_tot = 0
-
-#     fmin_calls = 0
-#     fmin_it = 0
-
-#     builtins.Nps = M
-#     ###### Iterator below ######
-#     # Setting up the initial range and guess
-
-#     logalpha_0 = np.log10(alpha0)
-
-#     invphi = (np.sqrt(5) - 1) / 2  # 1 / phi
-#     invphi2 = (3 - np.sqrt(5)) / 2  # 1 / phi^2
-
-#     x1 = logalpha_0 - 1
-#     x4 = logalpha_0 + 1
-#     x2 = x1 + invphi2 * (x4 - x1)
-#     x3 = x1 + invphi * (x4 - x1)
-#     xrange = np.array([x1, x2, x3, x4])
-#     yrange = np.array([.0, .0, .0, .0])
-#     ind = np.array([True, True, True, True])
-
-#     logalphavals = xrange
-#     builtins.min_in_range = False
-#     vv, rrind, cartcoords, coordinds, pvals, rhatvals = read_params(sample, vmin, dv,
-#                                                                     n)  # Generate the needed params from input
-
-#     while opt_diff >= opt_tol:
-#         if mise_diff < mise_tol or mise_it == 0:
-#             if 'phi0' in locals():
-#                 phi0, _, its = max_L(alpha0, pvals, rhatvals, vmin, dv, n, phi0_guess=phi0, disp=0, noniso=noniso)
-#                 fmin_calls += 1
-#                 fmin_it += its
-#             else:
-#                 # print("phi0 not defined, using phi_guess for first phi0")
-#                 phi0, _, its = max_L(alpha0, pvals, rhatvals, vmin, dv, n, disp=0, noniso=noniso)
-#                 fmin_calls += 1
-#                 fmin_it += its
-#             stdscr.addstr(2, 1, '%s' % "".join(([' '] * 42)))
-#             stdscr.addstr(5, 1, '%s' % "".join(([' '] * 42)))
-#             stdscr.addstr(2, 1, str('opt it       : %s' % opt_it), curses.color_pair(0) | curses.A_BOLD)
-#             stdscr.addstr(5, 1, str('time elapsed : %s hrs' % (np.around((time.time() - ti) / 3600, 3))),
-#                           curses.color_pair(0) | curses.A_BOLD)
-#             stdscr.refresh()
-#         vxvals, vyvals, vzvals, smpcoords, fv0 = sample_pdf(phi0, Nps, N, rrind, cartcoords, coordinds, vv,
-#                                                             n)  # Generate M pseudosamples of size N from phi0
-#         ise = np.zeros((Nps, 4))  # container for the integrated square errors
-#         for i in range(Nps):
-
-#             pspvals, psrhatvals = pseudosample_pvals(vxvals, vyvals, vzvals, smpcoords, i)  # Get a pseudosample
-
-#             for j in np.where(ind == True)[0]:
-#                 alpha = 10 ** (logalphavals[j])
-
-#                 phi, phiall, its = max_L(alpha, pspvals, psrhatvals, vmin, dv, n, phi0_guess=phi0, disp=0,
-#                                          noniso=noniso)
-#                 fmin_calls += 1
-#                 fmin_it += its
-
-#                 fv = np.exp(phi)
-#                 ise[i][j] = np.sum((fv - fv0) ** 2)
-
-#         mise = np.mean(ise, axis=0)
-
-#         try:
-#             np.copyto(yrange, mise, where=ind)
-#         except TypeError:
-#             raise Exception('\nyrange : ' + str(yrange) + ', ' + str(yrange.dtype) +
-#                             '\nmise   : ' + str(mise) + ', ' + str(mise.dtype) +
-#                             '\nind    : ' + str(ind) + ', ' + str(ind.dtype))
-
-#         with open(tree_file, 'a') as txt:
-#             data = np.ones((4, 3))
-#             data[:, 0] = np.ones(4) * opt_it
-#             data[:, 1] = xrange
-#             data[:, 2] = yrange
-#             np.savetxt(txt, data)
-
-#         xrange_old = xrange
-#         yrange_old = yrange
-#         logalphavals, mise_diff, xrange, yrange, ind, step = gss_mise(xrange, yrange)  # Get the new gss range
-
-#         ### For the debugger:
-#         t = (time.time() - ti) / (3600)
-#         mise_it_tot += 1
-#         mise_it += 1
-#         make_string(stdscr, logalpha_0, opt_it, mise_it, mise_it_tot, mise_diff, xrange, xrange_old, yrange_old, t,
-#                     step, 'gss')
-
-#         if mise_diff < mise_tol:
-#             logalpha_opt = (xrange[0] + xrange[3]) / 2
-
-#             opt_diff = abs(logalpha_opt - logalpha_0)
-
-#             logalpha_0 = logalpha_opt
-#             alpha0 = 10 ** (logalpha_0)
-
-#             x1 = logalpha_0 - 1
-#             x4 = logalpha_0 + 1
-#             x2 = x1 + invphi2 * (x4 - x1)
-#             x3 = x1 + invphi * (x4 - x1)
-#             xrange = np.array([x1, x2, x3, x4])
-#             yrange = np.array([.0, .0, .0, .0])
-#             ind = np.array([True, True, True, True])
-
-#             logalphavals = xrange
-#             builtins.min_in_range = False
-#             builtins.Nps = M
-#             opt_it += 1
-
-#     alpha_fin = 10 ** (logalpha_0)
-
-#     with open(tree_file, 'a') as txt:
-#         txt.write('#FINISHED\n')
-
-#     stdscr.erase()
-#     stdscr.addstr(0, 1, str('The optimal value for alpha is : %.2f' % alpha_fin), curses.color_pair(0) | curses.A_BOLD)
-#     stdscr.addstr(1, 1, str('To run took : %s opt alpha iterations' % opt_it), curses.color_pair(0) | curses.A_BOLD)
-#     stdscr.addstr(2, 1, str('            : %s gss iterations' % mise_it_tot), curses.color_pair(0) | curses.A_BOLD)
-#     stdscr.addstr(3, 1, str('            : %s fmin_cg calls' % fmin_calls), curses.color_pair(0) | curses.A_BOLD)
-#     stdscr.addstr(4, 1, str('            : %s fmin_cg iterations' % fmin_it), curses.color_pair(0) | curses.A_BOLD)
-#     stdscr.addstr(6, 1, "Press any key 3 times to log output and close program!",
-#                   curses.color_pair(2) | curses.A_BOLD | curses.A_BLINK)
-#     stdscr.addstr(7, 1, "Press any key 3 times to log output and close program!",
-#                   curses.color_pair(2) | curses.A_BOLD | curses.A_BLINK)
-#     stdscr.addstr(8, 1, "Press any key 3 times to log output and close program!",
-#                   curses.color_pair(2) | curses.A_BOLD | curses.A_BLINK)
-#     stdscr.refresh()
-#     stdscr.getkey()
-#     stdscr.getkey()
-#     stdscr.getkey()
-
-#     return alpha_fin
-
-
-# #@profile
-# def read_params(sample, vmin, dv, n):
-#     pvals, rhatvals = calc_p_rhat(sample)
-#     vxmin, vymin, vzmin = vmin
-#     dvx, dvy, dvz = dv
-#     nx, ny, nz = n
-#     # We want to compute the rhat values for every sample
-#     # So we just draw M sets of size N of the coordinates from the original
-#     # sample that we will use for each iteration of the sample.
-
-#     sample.set_representation_cls(coord.CartesianRepresentation)
-#     cartcoords = np.zeros((len(sample), 3))
-#     cartcoords[:, 0] = sample.u
-#     cartcoords[:, 1] = sample.v
-#     cartcoords[:, 2] = sample.w
-#     coordinds = np.linspace(0, len(cartcoords) - 1, len(cartcoords))
-
-#     vxmax, vymax, vzmax = vxmin + nx * dvx, vymin + ny * dvy, vzmin + nz * dvz
-
-#     vx_bins = np.linspace(vxmin, vxmax, nx+1)
-#     vy_bins = np.linspace(vymin, vymax, ny+1)
-#     vz_bins = np.linspace(vzmin, vzmax, nz+1)
-
-#     vxc = (vx_bins[1:] + vx_bins[:-1]) / 2
-#     vyc = (vy_bins[1:] + vy_bins[:-1]) / 2
-#     vzc = (vz_bins[1:] + vz_bins[:-1]) / 2
-
-#     vxx, vyy, vzz = np.meshgrid(vxc, vyc, vzc, indexing='ij')  # The centre values of each cell in our v-space box
-#     vv = (vxx, vyy, vzz)
-#     ind = np.indices((nx, ny, nz))
-
-#     rind = np.ravel_multi_index(ind, (nx, ny, nz))  # An array containing the 3D coordinates of our box
-
-#     rrind = np.ravel(rind)
-
-#     return vv, rrind, cartcoords, coordinds, pvals, rhatvals
-
-
-# #@profile
-# def sample_pdf(phi0, M, N, rrind, cartcoords, coordinds, vv, n):
-#     nx, ny, nz = n
-
-#     fv0 = np.exp(phi0)  # The pdf f(v) given our inital guess alpha0
-#     fv0s = np.sum(fv0)
-#     prob = np.ravel(fv0 / fv0s)  # The normalised probability
-#     np.random.seed(0)
-#     smp = np.random.choice(rrind, (M, N), p=prob)  # Creation of M samples of size n given f(v)
-#     smpcoordinds = np.random.choice(coordinds, (M, N)).astype(int)  # We also draw random positions for these stars
-
-#     smpcoords = cartcoords[smpcoordinds]
-
-#     smpx, smpy, smpz = np.asarray(np.unravel_index(smp, (nx, ny, nz)))
-
-#     vxx, vyy, vzz = vv
-#     vxvals = vxx[smpx, smpy, smpz]
-#     vyvals = vyy[smpx, smpy, smpz]
-#     vzvals = vzz[smpx, smpy, smpz]
-
-#     return vxvals, vyvals, vzvals, smpcoords, fv0
-
-
-# #@profile
-# def pseudosample_pvals(vxvals, vyvals, vzvals, smpcoords, i):
-#     smpvx, smpvy, smpvz = vxvals[i], vyvals[i], vzvals[i]  # For every pseudosample we get velocities
-
-#     coordx, coordy, coordz = smpcoords[i, :, 0], smpcoords[i, :, 1], smpcoords[i, :, 2]  # ... as well as coordinates
-
-#     psample = coord.Galactic(u=coordx * u.pc, v=coordy * u.pc, w=coordz * u.pc, U=smpvx * (u.km / u.s),
-#                              V=smpvy * (u.km / u.s), W=smpvz * (u.km / u.s),
-#                              representation_type=coord.CartesianRepresentation,
-#                              differential_type=coord.CartesianDifferential)
-
-#     psample.set_representation_cls(coord.SphericalRepresentation, coord.SphericalCosLatDifferential)
-
-#     pspvals, psrhatvals = calc_p_rhat(psample)
-
-#     return pspvals, psrhatvals
-
-
-
-
-# def gss_mise(xrange, yrange):
-#     '''Function that performs the Golden section iteration and returns which new alpha needs to be evaluated, as well
-#     as its location within the array. If x1(x4) has the smallest function value, we step 1 in log down(up) from
-#     x1(x4). I.e the new range will be, using the old range values, x1-1 <-> x2 (x3 <-> x4+1). Calculates mise_diff.'''
-
-#     x1, x2, x3, x4 = xrange
-#     y1, y2, y3, y4 = yrange
-#     # This is if either edge has the smallest mise and we need to expand the range to ensure we have the minimum
-#     # in our range of x1 <-> x4.
-#     if (y1 < y2 < y3 < y4):
-#         if not (min_in_range):
-#             x1 = x1 - 1;
-#             x4 = x2
-#             xrange = np.array(
-#                 [x1, (x1 + (3 - np.sqrt(5)) / 2 * (x4 - x1)), (x1 + (np.sqrt(5) - 1) / 2 * (x4 - x1)), x4])
-#             yrange = np.array([0, 0, 0, y2],dtype=float)
-#             logalphavals = np.array(list(xrange[1:]) + [0])
-#             step = 'Down'
-
-#             return logalphavals, 10, xrange, yrange, np.array([True, True, True, False]), step
-#     elif (y1 > y2 > y3 > y4):
-#         if not (min_in_range):
-#             x1 = x3;
-#             x4 = x4 + 1
-#             xrange = np.array(
-#                 [x1, (x1 + (3 - np.sqrt(5)) / 2 * (x4 - x1)), (x1 + (np.sqrt(5) - 1) / 2 * (x4 - x1)), x4])
-#             yrange = np.array([y3, 0, 0, 0],dtype=float)
-#             logalphavals = np.array([0] + list(xrange[1:]))
-#             step = 'Up'
-
-#             return logalphavals, 10, xrange, yrange, np.array([False, True, True, True]), step
-
-#     # This is if we have the minmum in the range left <-> right. Script only enters here in this case.
-#     elif ((y2 < y1) and (y3 < y4)):
-#         builtins.min_in_range = True
-#         if y2 < y3:
-#             xrange = np.array([x1, (x1 + (3 - np.sqrt(5)) / 2 * (x4 - x1)), x2, x3])
-#             yrange = np.array([y1, 0, y2, y3],dtype=float)
-#             step = 'Left'
-#             logalphavals = np.array([0, xrange[1], 0, 0])
-
-#             return logalphavals, abs(xrange[0] - xrange[3]), xrange, yrange, np.array([False, True, False, False]), step
-
-#         else:
-#             xrange = np.array([x2, x3, (x1 + (np.sqrt(5) - 1) / 2 * (x4 - x1)), x4])
-#             yrange = np.array([y2, y3, 0, y4])
-#             step = 'Right'
-#             logalphavals = np.array([0, 0, xrange[2], 0],dtype=float)
-
-#             return logalphavals, abs(xrange[0] - xrange[3]), xrange, yrange, np.array([False, False, True, False]), step
-
-#     # If we go here the y-values imply a non-unimodal function, to which we must increase our
-#     # number of pseudosamples M and recalculate the MISE of the current range.
-#     else:
-#         M = Nps
-#         builtins.Nps = M + 5
-#         xrange = np.array([x1, x2, x3, x4])
-#         yrange = np.array([0, 0, 0, 0],dtype=float)
 #         step = 'Again'
-#         logalphavals = xrange
-
+#         logalphavals = xrang
 #         return logalphavals, abs(xrange[0] - xrange[3]), xrange, yrange, np.array([True, True, True, True]), step

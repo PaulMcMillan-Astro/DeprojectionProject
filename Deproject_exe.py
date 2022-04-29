@@ -198,8 +198,6 @@ else:
 
 print(f'Sample has {len(data_raw)} stars\n')
 
-
-
 sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC, distance=coord.Distance(parallax=plx))
 
 sample = sample_icrs.transform_to(coord.Galactic)
@@ -224,7 +222,7 @@ if logging:
     # Create a folder for the run and save mxl data
     os.chdir('/home/daniel/DeprojectionProject')
     folder = make_folder()
-    np.save('RUNS/' + folder + '/mxl_data',mxl)
+    np.save('RUNS/' + folder + '/mxl_data', mxl)
 
     # Save output
     # RUNS folder identifier
@@ -266,7 +264,7 @@ if not autoplot:
 
         from Deproject_test import sanity_check
 
-        sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging)
+        sanity_check(pvals,rhatvals,list(mxl.values())[-1],vmin,dv,n,logging)
 
     elif sane == 'n':
 
@@ -279,7 +277,7 @@ if not autoplot:
     if shouldiplot == 'y':
         from Deproject_plots import plot_fv,plot_L_and_dL
 
-        plot_fv(mxl,input('What plane should I project onto? '),vmin,dv,n,folder,logging)
+        plot_fv(list(mxl.values())[-1],input('What plane should I project onto? '),vmin,dv,n,folder,logging)
 
         s=0
 
@@ -288,7 +286,7 @@ if not autoplot:
                 break
             plotagain = input('Do you want to plot another plane [y/n]? ')
             if plotagain == 'y':
-                plot_fv(mxl,input('What plane should I project onto [xy/yz/xz]? '),vmin,dv,n,folder,logging)
+                plot_fv(list(mxl.values())[-1],input('What plane should I project onto [xy/yz/xz]? '),vmin,dv,n,folder,logging)
                 s+=1
                 continue
             else:
@@ -302,10 +300,15 @@ if not autoplot:
         plot_L_and_dL(folder,logging)
 
 else:
-    #sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
-    plot_fv(mxl,'xy',vmin,dv,n,folder,logging)
-    plot_fv(mxl,'yz',vmin,dv,n,folder,logging)
-    plot_fv(mxl,'xz',vmin,dv,n,folder,logging)
+    if args.f == 'multigrid_max_L':
+        #sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
+        plot_fv(list(mxl.values())[-1],'xy',vmin,dv,n,folder,logging)
+        plot_fv(list(mxl.values())[-1],'yz',vmin,dv,n,folder,logging)
+        plot_fv(list(mxl.values())[-1],'xz',vmin,dv,n,folder,logging)
+    else:
+        plot_fv(mxl,'xy',vmin,dv,n,folder,logging)
+        plot_fv(mxl,'yz',vmin,dv,n,folder,logging)
+        plot_fv(mxl,'xz',vmin,dv,n,folder,logging)
     plot_L_and_dL(folder, logging)
 
 print('My work here is done')
