@@ -39,7 +39,7 @@ def DM_plt_prefs():
                         })
     return
 
-def plot_fv(phi,plane,vmin,dv,n,folder,logging=0):
+def plot_fv(phi,plane,vmin,dv,n,folder,logging=0, polar=False):
     
     """Function that plots the velocity distribution f(v) that corresponds to
     a given array of phi-values."""
@@ -57,14 +57,20 @@ def plot_fv(phi,plane,vmin,dv,n,folder,logging=0):
         dx, dy = dvx, dvy
         x0, y0 = vxmin, vymin
         x1, y1 = vxmax, vymax
-        xlab, ylab = '$v_x$', '$v_y$'
+        if not polar:
+           xlab, ylab = '$v_x$', '$v_y$'
+        elif polar:
+           xlab, ylab = '$v_r$', '$v_\\theta$'
     elif plane == 'yz':
         axsum = 0
         n1, n2 = ny, nz
         dx, dy = dvy, dvz
         x0, y0 = vymin, vzmin
         x1, y1 = vymax, vzmax
-        xlab, ylab = '$v_y$', '$v_z$'
+        if not polar:
+           xlab, ylab = '$v_y$', '$v_z$'
+        elif polar:
+           xlab, ylab = '$v_\\theta$', '$v_\phi$'
     elif plane == 'xz':
         axsum = 1
         n1, n2 = nx, nz
@@ -72,6 +78,10 @@ def plot_fv(phi,plane,vmin,dv,n,folder,logging=0):
         x0, y0 = vxmin, vzmin
         x1, y1 = vxmax, vzmax
         xlab, ylab = '$v_x$', '$v_z$'
+        if not polar:
+           xlab, ylab = '$v_x$', '$v_z$'
+        elif polar:
+           xlab, ylab = '$v_r$', '$v_\phi$'
         
     fv = np.exp(phi)
     

@@ -155,9 +155,30 @@ def make_treefile():
 
     return file_name
 
+
+def make_polar(sample, pvals, rhat):
+    sample_gc = sample.galactocentric
+    x = sample_gc.x
+    y = sample_gc.y
+    z = sample_gc.z
+
+    r = np.sqrt(x**2 + y**2 + z**2)
+    theta = np.arccos(z/r)
+    phi = np.arctan2(y, x)
+
+    vsun = sample_gc.galcen_v_sun.d_xyz
+
+    R = np.array([[np.sin(theta)*np.cos(phi), np.sin(theta)*np.sin(phi), np.cos(theta)],
+                  [np.cos(theta)*np.cos(phi), np.cos(theta)*np.sin(phi), -np.sin(theta)],
+                  [-np.sin(phi), np.cos(phi), np.zeros(len(phi))]]).transpose(2, 0, 1)
+
+    pvals_polar = ( R @ (vsun.value + pvals)[..., np.newaxis]).squeeze()
+    rhat_polar = ( R @ rhat[..., np.newaxis]).squeeze()
+
+    return pvals_polar, rhat_polar
 #
 #@profile
-def calc_p_rhat(sample):
+def calc_p_rhat(sample, polar=False):
     """Function that computes the values of rhat and the tangential velocity for a given sample
 
        Computation of the relevant quantities
@@ -173,6 +194,8 @@ def calc_p_rhat(sample):
     # Oort constant values from Bovy (2018)
     A = (15.3 * (u.km / (u.s * u.kpc)))
     B = (-11.9 * (u.km / (u.s * u.kpc)))
+    A = 0*A.unit
+    B = 0*B.unit
 
     if isinstance(sample, Table):
         b = sample['b']
@@ -181,7 +204,7 @@ def calc_p_rhat(sample):
         mub_obs = sample['pmb'].to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
         p = sample['parallax'].to(u.kpc, equivalencies=u.parallax())
 
-    elif isinstance(sample, coord.builtin_frames.galactic.Galactic) or isinstance(sample, coord.sky_coordinate.SkyCoord):
+    elif isinstance(sample, (coord.builtin_frames.galactic.Galactic, coord.sky_coordinate.SkyCoord)):
         b = sample.b
         l = sample.l
         mul_obs = sample.pm_l_cosb.to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
@@ -193,17 +216,49 @@ def calc_p_rhat(sample):
     sinl = np.sin(l)
     sinb = np.sin(b)
 
-    mul = mul_obs - A * np.cos(2 * l) - B
-    mub = mub_obs + A * np.sin(2 * l) * cosb * sinb
+    if not polar:
+        mul = mul_obs - A * np.cos(2 * l) - B
+        mub = mub_obs + A * np.sin(2 * l) * cosb * sinb
 
-    pvals = p * np.vstack((-sinl*mul - cosl*sinb*mub,
-                           cosl*mul - sinl*sinb*mub,
-                           cosb*mub))
-    pvals = pvals.T
+        pvals = (p * np.vstack((-sinl*mul - cosl*sinb*mub,
+                                cosl*mul - sinl*sinb*mub,
+                                cosb*mub))).T
 
-    rhatvals = np.array([cosb * cosl, cosb * sinl, sinb]).T
+        rhatvals = np.array([cosb * cosl, cosb * sinl, sinb]).T
 
-    return pvals, rhatvals
+        return pvals, rhatvals
+    
+    elif polar:
+        mul = mul_obs
+        mub = mub_obs
+        pvals = (p * np.vstack((-sinl*mul - cosl*sinb*mub,
+                                cosl*mul - sinl*sinb*mub,
+                                cosb*mub))).T
+        rhatvals = np.array([cosb * cosl, cosb * sinl, sinb]).T
+
+        # Get polar coordinates. We start by creating a Galactocentric frame copy of the sample
+        sample_galcen = sample.transform_to(frame='galactocentric')
+        x = sample_galcen.cartesian.x.value
+        y = sample_galcen.cartesian.y.value
+        z = sample_galcen.cartesian.z.value
+
+        # Get solar velocity in Galactocentric frame
+        v_sun = np.array([sample_galcen.galcen_v_sun.d_x.value,
+                          sample_galcen.galcen_v_sun.d_y.value,
+                          sample_galcen.galcen_v_sun.d_z.value])*u.km/u.s
+
+        r = np.sqrt(x**2 + y**2 + z**2)
+        theta = np.arccos(z/r)
+        phi = np.arctan2(y, x)
+
+        R = np.array([[np.sin(theta)*np.cos(phi), np.sin(theta)*np.sin(phi), np.cos(theta)],
+                     [np.cos(theta)*np.cos(phi), np.cos(theta)*np.sin(phi), -np.sin(theta)],
+                     [-np.sin(phi), np.cos(phi), np.zeros_like(phi)]]).transpose(2, 0, 1)
+        # Get polar pvals
+        pvals += v_sun # We add the motion of the sun
+        pvals_polar = (R @ pvals[..., np.newaxis]).squeeze()
+        rhatvals_polar = (R @ rhatvals[..., np.newaxis]).squeeze()
+        return pvals_polar, rhatvals_polar
 
 
 #
@@ -286,12 +341,7 @@ def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
     pmean = pvals.mean(axis=-2)
 
     # Fast way for outer product eq (4) of DB98
-    rhat_outer = np.expand_dims(rhat, axis=-1) * np.expand_dims(rhat, axis=-2)
-
-    # Create N_star identity matrices
-    A0 = np.identity(3) * np.expand_dims(np.ones(rhat.shape[:-1]), axis=(-1, -2))
-    A = A0 - rhat_outer
-    del rhat_outer
+    A = np.identity(3) - rhat[..., np.newaxis] * rhat[..., np.newaxis, :]
 
 
     A_mean_inv = np.linalg.inv(A.mean(axis=-3))
@@ -485,7 +535,6 @@ def get_neg_L(phi, *args):
     L_tilde = t1 - t2 - t3 # eq. 31 in DB98
     neg_L = -1 * L_tilde  # Since we want to maximize L_tilde, we should minimize -L_tilde
     builtins.current_L = L_tilde
-    print(f'{t1=:.6f}, {t2=:.6f}, {t3=:.6f}')
     return neg_L
 
 
@@ -537,7 +586,7 @@ def fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it):
 
 
 #@profile
-def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_guess=[], noniso=False, printing=True):
+def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_guess=[], noniso=False, printing=True, polar=False):
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_neg_L().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
     star sample for which the velocity distribution is to be estimated."""
@@ -559,8 +608,15 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
         phi0 = phi_guess(v0_guess, disp_guess, vmin, dv,n)
     else:
         phi0 = phi0_guess
+    if polar:
+        sigma2 = disp_guess**2
 
     Kvals = KvalsSparseMethod(pvals, rhatvals, vmin, dv, n)
+
+    plt.figure()        
+    plt.imshow(np.array(Kvals.sum(axis=0)).reshape(n).sum(axis=1).T, extent=[-150, 150, -300, -100])
+    plt.gca().invert_xaxis()
+    plt.savefig(f'kvals.jpg', format='jpg')
 
     args = (Kvals, N, alpha, dv, n, sigma2)
     phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
@@ -585,7 +641,7 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
 
 
 #@profile
-def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_guess=[], noniso=False, printing=False):
+def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_guess=[], noniso=False, printing=False, polar=False):
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_neg_L().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
     star sample for which the velocity distribution is to be estimated.
@@ -611,6 +667,8 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
         phi0 = phi_guess(v0_guess, disp_guess, vmin, dv,n)
     else:
         phi0 = phi0_guess
+    if polar:
+        sigma2 = disp_guess**2
 
     builtins.L     = [[] for _ in range(len(box_steps))]
     builtins.gradL = [[] for _ in range(len(box_steps))]
@@ -627,9 +685,6 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
         Kvals = KvalsSparseMethod(pvals, rhatvals, vmin, dv, n)
 
         args = (Kvals, N, alpha, dv, n, sigma2)
-#        plt.figure()
-#        plt.imshow(np.exp(phi0).sum(axis=2).T, origin='lower')
-#        plt.savefig(f'phi_{grid_step}.jpg', format='jpg')
         phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
         
         ### This is where the minimization occurs
@@ -639,10 +694,8 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
         
 #        mxl, fopt, fcalls, gcalls, flag, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False, full_output=True, callback=callback_mg)
         optr = minimize(fun=get_neg_L, x0=phi0r, method='CG', jac=get_grad_neg_L, args=args, callback=callback_mg, options={'gtol': 1e-6, 'disp': False, 'return_all': True})
-        print(Kvals.sum(), N, alpha, dv, n, sigma2, sep='\n')
         mxl, fopt, fcalls, gcalls, flag = optr.x, optr.fun, optr.nfev, optr.njev, optr.status
         fmin_it += optr.nit
-        print(f'The value of get_neg_L with best estimate is: {get_neg_L(mxl,Kvals, N, alpha, dv, n, sigma2)}')
 #        fmin_it += np.shape(phi_all)[0] - 1
 
         mxl_dict['x'.join(n.astype(str))] = mxl.reshape(n)
@@ -671,7 +724,7 @@ def KvalsSparseMethod(pvals, rhat, vmin, dv, n):
     required_memory = 8*n_stars*np.ceil(np.linalg.norm(n)).astype(int)/1e9
 
     if required_memory > allocated_memory:
-        raise Exception(f'Required memory for {required_memory:.2f} GB exceeds available memory {allocated_memory:.2f} GB')
+        raise MemoryError(f'Required memory for {required_memory:.2f} GB exceeds available memory {allocated_memory:.2f} GB')
     
     n_stars = len(pvals)
     lil = scisp.lil_matrix((n_stars, np.prod(n)))
@@ -682,44 +735,34 @@ def KvalsSparseMethod(pvals, rhat, vmin, dv, n):
         
     return lil.tocsc()
 
+
 def calc_sparse_K(pk, rhat, vmin, dv, n):
     '''Calculate the values of K simultaneously for all bins for a given star with tangential velocity
         vector pk and a unit vector rhat'''
 
-    vxmin, vymin, vzmin = vmin
-    dvx, dvy, dvz = dv
-    nx, ny, nz = n
-    pkx, pky, pkz = pk
-    rhatx, rhaty, rhatz = rhat
 
-    vxmax, vymax, vzmax = vxmin + nx * dvx, vymin + ny * dvy, vzmin + nz * dvz
+    vmax = vmin + dv*n
 
     """We now solve the line equation v = pk + vr*rhat, where v are the intersections of the tangential velocity line
     and the boundaries of each bin"""
 
-    vx_bins = np.linspace(vxmin, vxmax, nx + 1)
-    vy_bins = np.linspace(vymin, vymax, ny + 1)
-    vz_bins = np.linspace(vzmin, vzmax, nz + 1)
+    vbins = (np.linspace(vmin[i], vmax[i], n[i] + 1) for i in range(3))
 
-    vrx = (vx_bins - pkx) / rhatx
-    vry = (vy_bins - pky) / rhaty
-    vrz = (vz_bins - pkz) / rhatz
+    vr = [(np.array(vb) - pk[i])/rhat[i] for i, vb in enumerate(vbins)]
 
     """After solving the line equation for each dim we remove the vr values which solve the equation
     for bins outside of our specified box."""
 
-    vrmax = min(max(vrx), max(vry), max(vrz))
-    vrmin = max(min(vrx), min(vry), min(vrz))
+    vrmax = min(map(np.max, vr))
+    vrmin = max(map(np.min, vr))
 
-    vrx = vrx[(vrx <= vrmax) & (vrx >= vrmin)]
-    vry = vry[(vry <= vrmax) & (vry >= vrmin)]
-    vrz = vrz[(vrz <= vrmax) & (vrz >= vrmin)]
+    vr = [arr[(arr <= vrmax) & (arr >= vrmin)] for arr in vr]
 
-    vr = np.concatenate((vrx, vry, vrz))
+    vr = np.concatenate(vr)
     vr.sort()  # We obtain an ordered list with all vr values for intersections between entry and exit points
     
     if len(vr) == 0:
-        return 0, 0
+        return np.array([]), np.array([])
     
     vr_prime = (vr[:-1] + vr[1:]) / 2
     pks = np.ones((len(vr_prime), len(pk))) * pk[np.newaxis]
@@ -733,19 +776,14 @@ def calc_sparse_K(pk, rhat, vmin, dv, n):
 
     v_prime = pks + vr_primestack * rhats
 
-    line_bins = np.floor((v_prime - vmins) / dv)
-    line_bins = line_bins.astype(int)
+    line_bins = ((v_prime - vmins) // dv).astype(int)
 
     line_len = vr[1:] - vr[:-1]  # Gets the length of each line
     non_zero = np.nonzero(line_len)
     line_len = line_len[non_zero]  # Removes duplicate intersections
     line_bins = line_bins[non_zero].T
-    #line_bins = np.vstack((np.ones(line_bins.shape[0])*i_star, line_bins.T)).astype(int)
     
-    vals = (line_len / (dvx * dvy * dvz))
+    vals = (line_len / np.prod(dv))
     return np.ravel_multi_index(line_bins, n), vals
 
 
-#         step = 'Again'
-#         logalphavals = xrang
-#         return logalphavals, abs(xrange[0] - xrange[3]), xrange, yrange, np.array([True, True, True, True]), step

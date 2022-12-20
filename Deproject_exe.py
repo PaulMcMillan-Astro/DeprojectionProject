@@ -160,19 +160,19 @@ N = int(vars_[0][0])
 n = np.array(vars_[1][0].split(',')[:],dtype=int)
 vmin = np.array(vars_[2][0].split(',')[:],dtype=float)
 dv = np.array(vars_[3][0].split(',')[:],dtype=float)
-use_guess = bool(int(vars_[4][0]))
-non_iso = bool(int(vars_[5][0]))
-v_guess = np.array(vars_[6][0].split(',')[:],dtype=float)
-disp_guess = np.array(vars_[7][0].split(',')[:],dtype=float)
-alpha = float(vars_[8][0])
-datafile = vars_[9][0].rstrip('\n')
-logging = bool(int(vars_[10][0]))
+polar = bool(int(vars_[4][0]))
+use_guess = bool(int(vars_[5][0]))
+non_iso = bool(int(vars_[6][0]))
+v_guess = np.array(vars_[7][0].split(',')[:],dtype=float)
+disp_guess = np.array(vars_[8][0].split(',')[:],dtype=float)
+alpha = float(vars_[9][0])
+datafile = vars_[10][0].rstrip('\n')
+logging = bool(int(vars_[11][0]))
 
 os.chdir("DATA/")
 
 if datafile[-4:] == '.vot':
     data_raw = QTable.read(datafile, format='votable')
-    dist = data_raw['dist']
     RA = data_raw['ra']
     DEC = data_raw['dec']
     plx = data_raw['parallax']
@@ -198,19 +198,30 @@ else:
 
 print(f'Sample has {len(data_raw)} stars\n')
 
-sample_icrs = coord.ICRS(ra = RA, dec = DEC, pm_ra_cosdec = pm_RA, pm_dec = pm_DEC, distance=coord.Distance(parallax=plx))
+sample = coord.SkyCoord(ra=RA,
+                        dec=DEC,
+                        pm_ra_cosdec=pm_RA,
+                        pm_dec=pm_DEC, 
+                        distance=coord.Distance(parallax=plx),
+                        radial_velocity=np.zeros(len(plx))*u.km/u.s, # This is necessary to extract pvals from astropy
+                        frame='icrs').galactic
 
-sample = sample_icrs.transform_to(coord.Galactic)
+pvals = sample.velocity.d_xyz.T.unmasked.value
+rhatvals = sample.spherical.unit_vectors()['distance'].xyz.T.unmasked.value
 
-pvals, rhatvals = calc_p_rhat(sample)
-pvals = pvals.value
+if polar:
+    pvals, rhatvals = make_polar(sample, pvals, rhatvals)
+
+#pvals, rhatvals = calc_p_rhat(sample, polar=polar)
+#pvals = pvals.unmasked.value
+
 if bool(int(args.bs)):
     pvals, rhatvals = bootstrap_sample(pvals, rhatvals)
 
 if use_guess:
-    mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n ,v0_guess=v_guess, disp_guess=disp_guess, noniso=non_iso)
+    mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n ,v0_guess=v_guess, disp_guess=disp_guess, noniso=non_iso, polar=polar)
 elif not use_guess:
-    mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n, noniso=non_iso)
+    mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n, noniso=non_iso, polar=polar)
 tf = time.time()
 endtime = (tf - builtins.ti)/60
 print("\nThe run took: ", endtime, 'mins')
@@ -302,13 +313,13 @@ if not autoplot:
 else:
     if args.f == 'multigrid_max_L':
         #sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
-        plot_fv(list(mxl.values())[-1],'xy',vmin,dv,n,folder,logging)
-        plot_fv(list(mxl.values())[-1],'yz',vmin,dv,n,folder,logging)
-        plot_fv(list(mxl.values())[-1],'xz',vmin,dv,n,folder,logging)
+        plot_fv(list(mxl.values())[-1],'xy',vmin,dv,n,folder,logging, polar)
+        plot_fv(list(mxl.values())[-1],'yz',vmin,dv,n,folder,logging, polar)
+        plot_fv(list(mxl.values())[-1],'xz',vmin,dv,n,folder,logging, polar)
     else:
-        plot_fv(mxl,'xy',vmin,dv,n,folder,logging)
-        plot_fv(mxl,'yz',vmin,dv,n,folder,logging)
-        plot_fv(mxl,'xz',vmin,dv,n,folder,logging)
+        plot_fv(mxl,'xy',vmin,dv,n,folder,logging, polar)
+        plot_fv(mxl,'yz',vmin,dv,n,folder,logging, polar)
+        plot_fv(mxl,'xz',vmin,dv,n,folder,logging, polar)
     plot_L_and_dL(folder, logging)
 
 print('My work here is done')
