@@ -201,7 +201,7 @@ print(f'Sample has {len(data_raw)} stars\n')
 sample = coord.SkyCoord(ra=RA,
                         dec=DEC,
                         pm_ra_cosdec=pm_RA,
-                        pm_dec=pm_DEC, 
+                        pm_dec=pm_DEC,
                         distance=coord.Distance(parallax=plx),
                         radial_velocity=np.zeros(len(plx))*u.km/u.s, # This is necessary to extract pvals from astropy
                         frame='icrs').galactic
@@ -211,9 +211,6 @@ rhatvals = sample.spherical.unit_vectors()['distance'].xyz.T.unmasked.value
 
 if polar:
     pvals, rhatvals = make_polar(sample, pvals, rhatvals)
-
-#pvals, rhatvals = calc_p_rhat(sample, polar=polar)
-#pvals = pvals.unmasked.value
 
 if bool(int(args.bs)):
     pvals, rhatvals = bootstrap_sample(pvals, rhatvals)
@@ -312,7 +309,6 @@ if not autoplot:
 
 else:
     if args.f == 'multigrid_max_L':
-        #sanity_check(pvals,rhatvals,mxl,vmin,dv,n,logging,folder)
         plot_fv(list(mxl.values())[-1],'xy',vmin,dv,n,folder,logging, polar)
         plot_fv(list(mxl.values())[-1],'yz',vmin,dv,n,folder,logging, polar)
         plot_fv(list(mxl.values())[-1],'xz',vmin,dv,n,folder,logging, polar)

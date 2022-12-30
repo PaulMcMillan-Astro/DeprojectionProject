@@ -27,3 +27,4 @@ memory_profiler.log
 *.votable
 memory_debugger.py
 runs.sh
+*.key

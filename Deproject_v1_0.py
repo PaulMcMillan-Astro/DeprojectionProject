@@ -24,31 +24,7 @@ from IPython.display import clear_output
 from types import ModuleType, FunctionType
 from gc import get_referents
 
-def mod_dict(vdict):
-    for var in vdict.keys():
-        vdict[var] = getsize(vdict[var])
-    return vdict
 
-def getsize(obj):
-    BLACKLIST = type, ModuleType, FunctionType
-    """sum size of object & members."""
-    if isinstance(obj, BLACKLIST):
-        return 0
-    seen_ids = set()
-    size = 0
-    objects = [obj]
-    while objects:
-        need_referents = []
-        for obj in objects:
-            if not isinstance(obj, BLACKLIST) and id(obj) not in seen_ids:
-                seen_ids.add(id(obj))
-                size += sys.getsizeof(obj)
-                need_referents.append(obj)
-        objects = get_referents(*need_referents)
-    return size
-
-
-#@profile
 def multigrid_steps(n):
     '''This function determines how many multigrids steps can be performed and returns the box size
     in each step. In addition, if the starting box dimensions are not divisible by 2**steps the final box dimensions
@@ -65,95 +41,22 @@ def multigrid_steps(n):
     return box_steps.astype(int)
 
 
-
-builtins.variables = dict()
-#@profile
-def update_variables(loc, glob):
-    loc_vars = list(loc.keys())
-    glob_vars = list(glob.keys())
-    all_vars = list(set(loc_vars) | set(glob_vars))
-
-    for var in all_vars:
-        try:
-            builtins.variables[var] = sys.getsizeof(glob[var])/1e6
-        except KeyError:
-            builtins.variables[var] = sys.getsizeof(loc[var])/1e6
-
-    variable_list = sorted([(name, value) for (name, value) in builtins.variables.items()],
-                          key=lambda x: x[1],
-                          reverse=True)
-    os.system('clear')
-    print('-'*60)
-    [print(var, ':', size, 'MiB') for var, size in variable_list[:3]]
-    return
-
-
-def write_variables():
-    cwd = os.getcwd()
-    os.chdir('/home/daniel/DeprojectionProject')
-    variables = list(builtins.lv.items())
-    l_vars = []
-    for var, obj in variables:
-        l_vars += [(var.ljust(30), obj/1e9)]
-    l_vars = sorted(l_vars, key=lambda mem: mem[1], reverse=True)
-    with open('variable_memory.log', 'w+') as vlog:
-        vlog.write('Variable name'.ljust(30) + 'Size'.ljust(15) + 'GB\n')
-        for line in l_vars:
-            vlog.write(line[0] + str(line[1]).ljust(15) + 'GB\n')
-
-    os.chdir(cwd)
-    return
-
-
-#@profile
 def zoomed_mxl(mxl):
     '''Takes a mxl result and upscales it with interpolation'''
     phi0_guess = zoom(mxl, zoom=2, order=3) - np.log(8)
 
     return phi0_guess
 
-#@profile
+
 def callback_mg(x):
     i = builtins.grid_step
     builtins.L[i].append(builtins.current_L)
     builtins.gradL[i].append(builtins.current_gradL)
 
-#@profile
+
 def callback(x):
     builtins.L.append(builtins.current_L)
     builtins.gradL.append(builtins.current_gradL)
-
-#@profile
-def make_treefile():
-    '''Function that creates a .txt file with name YYYY-MM-DDx where x is the
-    first letter that is a non-existing file.
-    The file will contain the log(alpha) and MISE values used in each
-    opt iteration. This can be used to recreate the tree search path.'''
-
-    alp = string.ascii_lowercase
-    date_str = str(date.today())
-
-    list_str = []
-    for letter in alp:
-        list_str.append(date_str + letter)
-
-    for letter1 in alp:
-        for letter2 in alp:
-            list_str.append(date_str + letter1 + letter2)
-
-    list_str = np.array(list_str)
-
-    os_dirs = os.popen('ls logs | grep "%s"' % date_str).read().split("\n")[:-1]
-    os_dirs.sort(key=lambda x: len(x))
-    os_dirs = np.array(os_dirs)
-
-    existing_dirs = np.zeros(len(list_str), dtype='<U12')
-    existing_dirs[:len(os_dirs)] = os_dirs
-
-    file_name = 'logs/tree_' + list_str[list_str != existing_dirs][0] + '.txt'
-
-
-    return file_name
 
 
 def make_polar(sample, pvals, rhat):
@@ -176,159 +79,8 @@ def make_polar(sample, pvals, rhat):
     rhat_polar = ( R @ rhat[..., np.newaxis]).squeeze()
 
     return pvals_polar, rhat_polar
-#
-#@profile
-def calc_p_rhat(sample, polar=False):
-    """Function that computes the values of rhat and the tangential velocity for a given sample
-
-       Computation of the relevant quantities
-
-       l,b: Galactic coordinates
-       s: the distance obtained by inverting the parallax
-       mul, mub: proper motion in l and b
-       pvals: Tangential velocities obtained from eq. 2 in DB98
-       rhatvals: The unit vector of each star
-       vmin: Vector containing the minimum velocities in v-space
-       n: The number of cells we want in each dimension of our v-space box
-       dv: Step sizes for each dimension"""
-    # Oort constant values from Bovy (2018)
-    A = (15.3 * (u.km / (u.s * u.kpc)))
-    B = (-11.9 * (u.km / (u.s * u.kpc)))
-    A = 0*A.unit
-    B = 0*B.unit
-
-    if isinstance(sample, Table):
-        b = sample['b']
-        l = sample['l']
-        mul_obs = sample['pml_cosb'].to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
-        mub_obs = sample['pmb'].to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
-        p = sample['parallax'].to(u.kpc, equivalencies=u.parallax())
-
-    elif isinstance(sample, (coord.builtin_frames.galactic.Galactic, coord.sky_coordinate.SkyCoord)):
-        b = sample.b
-        l = sample.l
-        mul_obs = sample.pm_l_cosb.to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
-        mub_obs = sample.pm_b.to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
-        p = sample.distance.to(u.kpc)
-
-    cosl = np.cos(l)
-    cosb = np.cos(b)
-    sinl = np.sin(l)
-    sinb = np.sin(b)
-
-    if not polar:
-        mul = mul_obs - A * np.cos(2 * l) - B
-        mub = mub_obs + A * np.sin(2 * l) * cosb * sinb
-
-        pvals = (p * np.vstack((-sinl*mul - cosl*sinb*mub,
-                                cosl*mul - sinl*sinb*mub,
-                                cosb*mub))).T
-
-        rhatvals = np.array([cosb * cosl, cosb * sinl, sinb]).T
-
-        return pvals, rhatvals
-    
-    elif polar:
-        mul = mul_obs
-        mub = mub_obs
-        pvals = (p * np.vstack((-sinl*mul - cosl*sinb*mub,
-                                cosl*mul - sinl*sinb*mub,
-                                cosb*mub))).T
-        rhatvals = np.array([cosb * cosl, cosb * sinl, sinb]).T
-
-        # Get polar coordinates. We start by creating a Galactocentric frame copy of the sample
-        sample_galcen = sample.transform_to(frame='galactocentric')
-        x = sample_galcen.cartesian.x.value
-        y = sample_galcen.cartesian.y.value
-        z = sample_galcen.cartesian.z.value
-
-        # Get solar velocity in Galactocentric frame
-        v_sun = np.array([sample_galcen.galcen_v_sun.d_x.value,
-                          sample_galcen.galcen_v_sun.d_y.value,
-                          sample_galcen.galcen_v_sun.d_z.value])*u.km/u.s
-
-        r = np.sqrt(x**2 + y**2 + z**2)
-        theta = np.arccos(z/r)
-        phi = np.arctan2(y, x)
-
-        R = np.array([[np.sin(theta)*np.cos(phi), np.sin(theta)*np.sin(phi), np.cos(theta)],
-                     [np.cos(theta)*np.cos(phi), np.cos(theta)*np.sin(phi), -np.sin(theta)],
-                     [-np.sin(phi), np.cos(phi), np.zeros_like(phi)]]).transpose(2, 0, 1)
-        # Get polar pvals
-        pvals += v_sun # We add the motion of the sun
-        pvals_polar = (R @ pvals[..., np.newaxis]).squeeze()
-        rhatvals_polar = (R @ rhatvals[..., np.newaxis]).squeeze()
-        return pvals_polar, rhatvals_polar
 
 
-#
-#@profile
-def model_sample(N):
-    """Generates a simple model solar neighbourhood star sample in a Galactic frame of reference assuming a
-    velocity distribution that is a sum of three predefined Gaussians.
-
-    If one wishes to use other mean velocities, change these in mu0, mu1 and mu2, while the dispersions are changed
-    in disp0, disp1 and disp2. The relative weights, w1, w2, w3 determine how many of the stars that belong to
-    each Gaussian. As for now, they're just set to be ~1/3.
-
-    The stars have distances from the Sun that are in the range [10,100] pc.
-
-    Takes the following arguments:
-
-    N: Number of stars in the sample"""
-
-    xmax, ymax, zmax = np.array([100,100,100])/np.sqrt(3)
-    xmin, ymin, zmin = -xmax,-ymax,-zmax
-    #w0 = 1.
-    #w1 = 0.
-    w0 = w1 = 0.33
-    w2 = 1-(w0+w1)
-
-    #mu0 = np.array([0,0,0])
-    mu0 = np.array([30,30,30])
-    mu1 = np.array([-20,-20,-20])
-    mu2 = np.array([15,-15,15])
-
-    disp0 = np.array([25,23,27])
-    disp1 = np.array([13,17,15])
-    disp2 = np.array([9,14,12])
-
-    w_sample = np.random.random_sample(N)
-
-    psx = (np.random.rand(N) * (xmax - xmin) + xmin) * u.pc
-    psy = (np.random.rand(N) * (ymax - ymin) + ymin) * u.pc
-    psz = (np.random.rand(N) * (zmax - zmin) + zmin) * u.pc
-
-    from_g0 = np.where(w_sample < w0)  # We get the indices of the stars that belong to the first Gaussian
-    from_g1 = np.where((w0 <= w_sample) & (w_sample < (w0 + w1)))
-    from_g2 = np.where(w_sample > (1 - w2))
-
-    scale0 = np.random.randn(len(from_g0[0]), 3)
-    scale1 = np.random.randn(len(from_g1[0]), 3)
-    scale2 = np.random.randn(len(from_g2[0]), 3)
-
-    psvels = np.zeros((N, 3))
-
-    psvels[
-        from_g0] = mu0 + scale0 * disp0  # We exchange our empty velocity values with the ones obtained from each Gaussian
-    psvels[from_g1] = mu1 + scale1 * disp1
-    psvels[from_g2] = mu2 + scale2 * disp2
-
-    psvx, psvy, psvz = psvels.T
-    # We use Astropy's coord class which makes it easy to keep track of units and conversions
-
-    psample = coord.Galactic(u=psx, v=psy, w=psz, U=psvx * (u.km / u.s),
-                             V=psvy * (u.km / u.s), W=psvz * (u.km / u.s),
-                             representation_type=coord.CartesianRepresentation,
-                             differential_type=coord.CartesianDifferential)
-
-    psample.set_representation_cls(coord.SphericalRepresentation, coord.SphericalCosLatDifferential)
-
-
-    return psample, psvx, psvy, psvz
-
-
-#@profile
 def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
     """Function that applies equation 12 of DB98 for a set of stars from their tangential velocities and unit vectors.
     Returns the velocity dispersion tensor.
@@ -396,7 +148,7 @@ def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
 
         return sigma2
 
-#@profile
+
 def phi_guess(v0, disp0, vmin, dv, n):
     """Provides an initial guess of the phi values in each bin given an assumed distribution f(v).
     For now only allows for a sum of two Gaussians type guess given arrays with mean velocities and
@@ -438,8 +190,6 @@ def phi_guess(v0, disp0, vmin, dv, n):
     return phi
 
 
-#
-#@profile
 def sec_der(phi, sigma2, dv):
     '''This function calculates eq. 29 (and in turn eq. 30) of WD98. Each cell m has a contribution
     of -2*phi_m, phi_(m+e_i), and phi_(m-e_i) from itself, its neighbor one step up in the i
@@ -474,8 +224,6 @@ def sec_der(phi, sigma2, dv):
     return phi_arr
 
 
-#
-#@profile
 def grad_sec_der(phi, sigma2, dv):
     '''Here we calculate the equivalent factor to sec_der for the gradients third term'''
 
@@ -501,7 +249,6 @@ def grad_sec_der(phi, sigma2, dv):
     return phi_arr
 
 
-#@profile
 def get_neg_L(phi, *args):
     """The function that we wish to optimise. Corresponds to eq. 31 in D98.
 
@@ -538,8 +285,6 @@ def get_neg_L(phi, *args):
     return neg_L
 
 
-#
-#@profile
 def get_grad_neg_L(phi, *args):
     """In this function we compute the gradient of L. We compute the derivative for each cell and return a
     1D array of length (nx*ny*nz).
@@ -569,8 +314,6 @@ def get_grad_neg_L(phi, *args):
     return neg_grad_L
 
 
-#
-#@profile
 def fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it):
     l1 = ['Optimization terminated sucessfully.\n',
           colored('Warning','red',attrs=['bold'])+': Maximum number of iterations has been exceeded.\n',
@@ -585,7 +328,6 @@ def fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it):
     return
 
 
-#@profile
 def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_guess=[], noniso=False, printing=True, polar=False):
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_neg_L().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
@@ -613,11 +355,6 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
 
     Kvals = KvalsSparseMethod(pvals, rhatvals, vmin, dv, n)
 
-    plt.figure()        
-    plt.imshow(np.array(Kvals.sum(axis=0)).reshape(n).sum(axis=1).T, extent=[-150, 150, -300, -100])
-    plt.gca().invert_xaxis()
-    plt.savefig(f'kvals.jpg', format='jpg')
-
     args = (Kvals, N, alpha, dv, n, sigma2)
     phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
 
@@ -640,7 +377,6 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
     return mxlnew, fmin_it
 
 
-#@profile
 def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_guess=[], noniso=False, printing=False, polar=False):
     """Function that employs scipy.optimize.fmin_cg to maximise the function get_neg_L().
     It takes guesses of the distribution (currently only supports Gaussian guesses) and the relevant data from the
@@ -686,23 +422,21 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
 
         args = (Kvals, N, alpha, dv, n, sigma2)
         phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
-        
+
         ### This is where the minimization occurs
         print(f'Started fmin_cg on {(n[0],n[1],n[2])} grid after {(time.time() - builtins.ti)/60:.2f} mins...', end='', flush=True)
         builtins.L[grid_step].append(-1*get_neg_L(phi0r,Kvals, N, alpha, dv, n, sigma2))
         builtins.gradL[grid_step].append(np.linalg.norm(get_grad_neg_L(phi0r,Kvals, N, alpha, dv, n, sigma2)))
-        
+
 #        mxl, fopt, fcalls, gcalls, flag, phi_all = fmin_cg(get_neg_L, phi0r, fprime=get_grad_neg_L, gtol=1e-6, args=args, retall=True, disp=False, full_output=True, callback=callback_mg)
         optr = minimize(fun=get_neg_L, x0=phi0r, method='CG', jac=get_grad_neg_L, args=args, callback=callback_mg, options={'gtol': 1e-6, 'disp': False, 'return_all': True})
         mxl, fopt, fcalls, gcalls, flag = optr.x, optr.fun, optr.nfev, optr.njev, optr.status
         fmin_it += optr.nit
-#        fmin_it += np.shape(phi_all)[0] - 1
 
         mxl_dict['x'.join(n.astype(str))] = mxl.reshape(n)
 
         print(colored('Finished!','green',attrs=['bold','underline']),end='')
         print(' fopt : %s' % fopt)
-        ##########################################
 
         if grid_step == len(box_steps)-1:
             fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it)
@@ -717,7 +451,6 @@ def multigrid_max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess
     return mxl_dict, fmin_it
 
 
-#@profile
 def KvalsSparseMethod(pvals, rhat, vmin, dv, n):
     n_stars = len(pvals)
     allocated_memory = psutil.virtual_memory().available*0.8/1e9
@@ -725,14 +458,14 @@ def KvalsSparseMethod(pvals, rhat, vmin, dv, n):
 
     if required_memory > allocated_memory:
         raise MemoryError(f'Required memory for {required_memory:.2f} GB exceeds available memory {allocated_memory:.2f} GB')
-    
+
     n_stars = len(pvals)
     lil = scisp.lil_matrix((n_stars, np.prod(n)))
-    
+
     for i in range(n_stars):
         coords, vals = calc_sparse_K(pvals[i], rhat[i], vmin, dv, n)
         lil[i, coords] = vals
-        
+
     return lil.tocsc()
 
 
@@ -760,10 +493,10 @@ def calc_sparse_K(pk, rhat, vmin, dv, n):
 
     vr = np.concatenate(vr)
     vr.sort()  # We obtain an ordered list with all vr values for intersections between entry and exit points
-    
+
     if len(vr) == 0:
         return np.array([]), np.array([])
-    
+
     vr_prime = (vr[:-1] + vr[1:]) / 2
     pks = np.ones((len(vr_prime), len(pk))) * pk[np.newaxis]
     rhats = np.ones((len(vr_prime), len(rhat))) * rhat[np.newaxis]
@@ -782,8 +515,93 @@ def calc_sparse_K(pk, rhat, vmin, dv, n):
     non_zero = np.nonzero(line_len)
     line_len = line_len[non_zero]  # Removes duplicate intersections
     line_bins = line_bins[non_zero].T
-    
+
     vals = (line_len / np.prod(dv))
     return np.ravel_multi_index(line_bins, n), vals
 
 
+# # # # THE FOLLOW WAS MADE OBSOLITE BY # # # #
+# # # pvals = sample.velocity.d_xyz.T.unmasked.value
+# # # rhatvals = sample.spherical.unit_vectors()['distance'].xyz.T.unmasked.value
+
+def calc_p_rhat(sample, polar=False):
+    """Function that computes the values of rhat and the tangential velocity for a given sample
+
+       Computation of the relevant quantities
+
+       l,b: Galactic coordinates
+       s: the distance obtained by inverting the parallax
+       mul, mub: proper motion in l and b
+       pvals: Tangential velocities obtained from eq. 2 in DB98
+       rhatvals: The unit vector of each star
+       vmin: Vector containing the minimum velocities in v-space
+       n: The number of cells we want in each dimension of our v-space box
+       dv: Step sizes for each dimension"""
+    # Oort constant values from Bovy (2018)
+    A = (15.3 * (u.km / (u.s * u.kpc)))
+    B = (-11.9 * (u.km / (u.s * u.kpc)))
+    A = 0*A.unit
+    B = 0*B.unit
+
+    if isinstance(sample, Table):
+        b = sample['b']
+        l = sample['l']
+        mul_obs = sample['pml_cosb'].to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
+        mub_obs = sample['pmb'].to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
+        p = sample['parallax'].to(u.kpc, equivalencies=u.parallax())
+
+    elif isinstance(sample, (coord.builtin_frames.galactic.Galactic, coord.sky_coordinate.SkyCoord)):
+        b = sample.b
+        l = sample.l
+        mul_obs = sample.pm_l_cosb.to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
+        mub_obs = sample.pm_b.to(u.km / (u.s * u.kpc), equivalencies=u.dimensionless_angles())
+        p = sample.distance.to(u.kpc)
+
+    cosl = np.cos(l)
+    cosb = np.cos(b)
+    sinl = np.sin(l)
+    sinb = np.sin(b)
+
+    if not polar:
+        mul = mul_obs - A * np.cos(2 * l) - B
+        mub = mub_obs + A * np.sin(2 * l) * cosb * sinb
+
+        pvals = (p * np.vstack((-sinl*mul - cosl*sinb*mub,
+                                cosl*mul - sinl*sinb*mub,
+                                cosb*mub))).T
+
+        rhatvals = np.array([cosb * cosl, cosb * sinl, sinb]).T
+
+        return pvals, rhatvals
+
+    elif polar:
+        mul = mul_obs
+        mub = mub_obs
+        pvals = (p * np.vstack((-sinl*mul - cosl*sinb*mub,
+                                cosl*mul - sinl*sinb*mub,
+                                cosb*mub))).T
+        rhatvals = np.array([cosb * cosl, cosb * sinl, sinb]).T
+
+        # Get polar coordinates. We start by creating a Galactocentric frame copy of the sample
+        sample_galcen = sample.transform_to(frame='galactocentric')
+        x = sample_galcen.cartesian.x.value
+        y = sample_galcen.cartesian.y.value
+        z = sample_galcen.cartesian.z.value
+
+        # Get solar velocity in Galactocentric frame
+        v_sun = np.array([sample_galcen.galcen_v_sun.d_x.value,
+                          sample_galcen.galcen_v_sun.d_y.value,
+                          sample_galcen.galcen_v_sun.d_z.value])*u.km/u.s
+
+        r = np.sqrt(x**2 + y**2 + z**2)
+        theta = np.arccos(z/r)
+        phi = np.arctan2(y, x)
+
+        R = np.array([[np.sin(theta)*np.cos(phi), np.sin(theta)*np.sin(phi), np.cos(theta)],
+                     [np.cos(theta)*np.cos(phi), np.cos(theta)*np.sin(phi), -np.sin(theta)],
+                     [-np.sin(phi), np.cos(phi), np.zeros_like(phi)]]).transpose(2, 0, 1)
+        # Get polar pvals
+        pvals += v_sun # We add the motion of the sun
+        pvals_polar = (R @ pvals[..., np.newaxis]).squeeze()
+        rhatvals_polar = (R @ rhatvals[..., np.newaxis]).squeeze()
+        return pvals_polar, rhatvals_polar
