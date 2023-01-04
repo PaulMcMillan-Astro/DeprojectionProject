@@ -1,16 +1,12 @@
-import os
-os.chdir('/home/daniel/DeprojectionProject')
+import time
 from Deproject_v1_0 import *
 import time
 from astropy.io.ascii import read as tableread
-from astropy.table import QTable
-from astropy.stats import bootstrap
-from datetime import date
 import builtins
-import string
 import inspect
 from termcolor import colored
-from Deproject_test import sanity_check
+from input_manipulation import *
+# from Deproject_test import sanity_check
 import matplotlib
 #from memory_profiler import LogFile
 
@@ -24,7 +20,6 @@ change in L & dL over all iterations.
 If provided the file 'vars.ini' as an argument such that the terminal command is
 'python Deproject_exe.py -i vars.ini' it will read the input variables automatically"""
 
-#@profile
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -46,6 +41,7 @@ optional.add_argument("-a",
                     choices=['1', '0'],
                     help='Automatic plotting [default : 0]',
                     metavar='bool')
+
 optional.add_argument("-f",
                     default='multigrid_max_L',
                     const='multigrid_max_L',
@@ -78,147 +74,23 @@ elif args.f == 'multigrid_max_L':
     from Deproject_v1_0 import multigrid_max_L as max_func
 
 
-# Function that creates a non-existing folder to store output data
-def make_folder():
-    '''Function that writes a folder with name YYYY-MM-DDx where x
-    is the first letter that is a non-existing directory'''
-    alp = string.ascii_lowercase
-    date_str = str(date.today())
-
-    list_str = []
-    for letter in alp:
-        list_str.append(date_str + letter)
-
-    for letter1 in alp:
-        for letter2 in alp:
-            list_str.append(date_str + letter1 + letter2)
-
-    list_str = np.array(list_str)
-
-
-    os_dirs = os.popen('ls RUNS | grep "%s"' % date_str).read().split("\n")[:-1]
-    os_dirs.sort(key=lambda x: len(x))
-    os_dirs = np.array(os_dirs)
-
-    existing_dirs = np.zeros(len(list_str),dtype='<U12')
-    existing_dirs[:len(os_dirs)] = os_dirs
-
-    folder_name=list_str[list_str != existing_dirs][0]
-    os.system('mkdir RUNS/' + folder_name)
-
-    return folder_name
-
-def resample(plx, pmra, pmdec, plx_err, pmra_err, pmdec_err, plx_pmra_corr, plx_pmdec_corr, pmra_pmdec_corr):
-    '''Use the uncertainties and correlations between plx, pmra, pmdec to resample the values.'''
-    rng = np.random.default_rng()
-
-    plx_err = plx_err.value
-    pmra_err = pmra_err.value
-    pmdec_err = pmdec_err.value
-
-    for i in range(len(plx)):
-        mean = [plx[i].value, pmra[i].value, pmdec[i].value]
-        cov = np.array([
-                       [plx_err[i]**2,
-                        plx_pmra_corr[i]*plx_err[i]*pmra_err[i],
-                        plx_pmdec_corr[i]*plx_err[i]*pmdec_err[i]],
-                       [plx_pmra_corr[i]*plx_err[i]*pmra_err[i],
-                        pmra_err[i]**2,
-                        pmra_pmdec_corr[i]*pmra_err[i]*pmdec_err[i]],
-                       [plx_pmdec_corr[i]*plx_err[i]*pmdec_err[i],
-                        pmra_pmdec_corr[i]*pmra_err[i]*pmdec_err[i],
-                        pmdec_err[i]**2]
-                       ])
-
-        plx[i], pmra[i], pmdec[i] = rng.multivariate_normal(mean, cov)*np.array([plx.unit, pmra.unit, pmdec.unit])
-    return plx, pmra, pmdec
-
-def bootstrap_sample(pvals, rhatvals):
-    pvals, rhatvals = bootstrap(np.dstack([pvals, rhatvals]), bootnum=1).transpose(3, 0, 1, 2)
-    return np.squeeze(pvals), np.squeeze(rhatvals)
-
-##########You will need to change the directory path to your data#################
 ti = time.time()
 builtins.ti = ti
-def process_input(file_): #Function that reads the input file if any
-    h_file = []
-    input_ = open(file_, 'r')
-    for line in input_:
-        if line.find("#") != -1:
-            continue
-        elif line.find("\n") == 0:
-            continue
-        else:
-            h_file.append(line.split('\t'))
-    return h_file
 
 
-# Read the input file
-guessfile = args.i #The vars.ini file
-vars_ = process_input(guessfile)
-N = int(vars_[0][0])
-n = np.array(vars_[1][0].split(',')[:],dtype=int)
-vmin = np.array(vars_[2][0].split(',')[:],dtype=float)
-dv = np.array(vars_[3][0].split(',')[:],dtype=float)
-polar = bool(int(vars_[4][0]))
-use_guess = bool(int(vars_[5][0]))
-non_iso = bool(int(vars_[6][0]))
-v_guess = np.array(vars_[7][0].split(',')[:],dtype=float)
-disp_guess = np.array(vars_[8][0].split(',')[:],dtype=float)
-alpha = float(vars_[9][0])
-datafile = vars_[10][0].rstrip('\n')
-logging = bool(int(vars_[11][0]))
+dr = DataReader(filename = 'INIT/example.ini', resample=int(args.b))
+pvals, rhatvals = dr.create_sample()
 
-os.chdir("DATA/")
-
-if datafile[-4:] == '.vot':
-    data_raw = QTable.read(datafile, format='votable')
-    RA = data_raw['ra']
-    DEC = data_raw['dec']
-    plx = data_raw['parallax']
-    pm_RA = data_raw['pmra']
-    pm_DEC = data_raw['pmdec']
-    if bool(int(args.b)):
-        plx_err = data_raw['parallax_error']
-        pm_RA_err = data_raw['pmra_error']
-        pm_DEC_err = data_raw['pmdec_error']
-        plx_pmra_corr = data_raw['parallax_pmra_corr']
-        plx_pmdec_corr = data_raw['parallax_pmdec_corr']
-        pmra_pmdec_corr = data_raw['pmra_pmdec_corr']
-
-        plx, pm_RA, pm_DEC = resample(plx, pm_RA, pm_DEC, plx_err, pm_RA_err, pm_DEC_err, plx_pmra_corr, plx_pmdec_corr, pmra_pmdec_corr)
-else:
-    data_raw = tableread(datafile)
-    dist = 1000/data_raw['parallax']*u.pc
-    RA = (data_raw['ra']*u.degree)
-    DEC = (data_raw['dec']*u.degree)
-    plx = (data_raw['parallax']*u.mas)
-    pm_RA = (data_raw['pmra']*u.mas/u.yr)
-    pm_DEC = (data_raw['pmdec']*u.mas/u.yr)
-
-print(f'Sample has {len(data_raw)} stars\n')
-
-sample = coord.SkyCoord(ra=RA,
-                        dec=DEC,
-                        pm_ra_cosdec=pm_RA,
-                        pm_dec=pm_DEC,
-                        distance=coord.Distance(parallax=plx),
-                        radial_velocity=np.zeros(len(plx))*u.km/u.s, # This is necessary to extract pvals from astropy
-                        frame='icrs').galactic
-
-pvals = sample.velocity.d_xyz.T.unmasked.value
-rhatvals = sample.spherical.unit_vectors()['distance'].xyz.T.unmasked.value
-
-if polar:
-    pvals, rhatvals = make_polar(sample, pvals, rhatvals)
-
+if dr.polar:
+    pvals, rhatvals = dr.make_polar(pvals, rhatvals)
 if bool(int(args.bs)):
-    pvals, rhatvals = bootstrap_sample(pvals, rhatvals)
+    pvals, rhatvals = dr.bootstrap_sample(pvals, rhatvals)
 
-if use_guess:
-    mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n ,v0_guess=v_guess, disp_guess=disp_guess, noniso=non_iso, polar=polar)
-elif not use_guess:
-    mxl, fmin_it = max_func(alpha, pvals, rhatvals, vmin, dv, n, noniso=non_iso, polar=polar)
+if dr.use_guess:
+    mxl, fmin_it = max_func(dr.alpha, pvals, rhatvals, dr.vmin, dr.dv, dr.n, v0_guess=dr.v_guess, disp_guess=dr.disp_guess, noniso=dr.non_iso, polar=dr.polar)
+elif not dr.use_guess:
+    mxl, fmin_it = max_func(dr.alpha, pvals, rhatvals, vdr.vmin, dr.dv, dr.n, noniso=dr.non_iso, polar=dr.polar)
+
 tf = time.time()
 endtime = (tf - builtins.ti)/60
 print("\nThe run took: ", endtime, 'mins')
@@ -228,7 +100,6 @@ dv = builtins.dv
 
 if logging:
     # Create a folder for the run and save mxl data
-    os.chdir('/home/daniel/DeprojectionProject')
     folder = make_folder()
     np.save('RUNS/' + folder + '/mxl_data', mxl)
 

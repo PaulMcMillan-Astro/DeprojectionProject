@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 import astropy.units as u
-import astropy.coordinates as coord
 import scipy.stats as st
 import os
 import inspect
@@ -25,11 +24,26 @@ from types import ModuleType, FunctionType
 from gc import get_referents
 
 
-def multigrid_steps(n):
+def multigrid_steps(n, step=5):
     '''This function determines how many multigrids steps can be performed and returns the box size
-    in each step. In addition, if the starting box dimensions are not divisible by 2**steps the final box dimensions
-    are changed to accomodate this.'''
-    step = 5
+    in each step. If the starting box dimensions are not divisible by 2**step the final box dimensions
+    are changed to accomodate this.
+
+    Parameters
+    ----------
+    n : Array of shape (ndim,)
+        The number of bins in each velocity dimension.
+
+    step : int
+        The max amount of multigrid steps we are aiming for. We do not divide dimensions below 10.
+
+
+    Returns
+    -------
+    array
+        An array of shape (steps, ndim).
+    '''
+
     while any(np.round(n/(2**step)) < 10):
         step -= 1
     box_steps = (2**np.linspace(0,step,step+1).reshape(step+1,1) * np.round(n/(2**step))).astype(int)
@@ -42,7 +56,14 @@ def multigrid_steps(n):
 
 
 def zoomed_mxl(mxl):
-    '''Takes a mxl result and upscales it with interpolation'''
+    '''After a successful MLE on current multigrid step, produce phi0_guess of next step by upscaling MLE with interplation. This is done with scipy.ndimage.zoom(). The -log(8) is equivalent to diving by 2 for each dimension in linear space, ensuring the integral of the probability is one.
+
+    Parameters
+    ----------
+    mxl : array_like
+        The input array, our MLE.
+    '''
+
     phi0_guess = zoom(mxl, zoom=2, order=3) - np.log(8)
 
     return phi0_guess
@@ -58,27 +79,6 @@ def callback(x):
     builtins.L.append(builtins.current_L)
     builtins.gradL.append(builtins.current_gradL)
 
-
-def make_polar(sample, pvals, rhat):
-    sample_gc = sample.galactocentric
-    x = sample_gc.x
-    y = sample_gc.y
-    z = sample_gc.z
-
-    r = np.sqrt(x**2 + y**2 + z**2)
-    theta = np.arccos(z/r)
-    phi = np.arctan2(y, x)
-
-    vsun = sample_gc.galcen_v_sun.d_xyz
-
-    R = np.array([[np.sin(theta)*np.cos(phi), np.sin(theta)*np.sin(phi), np.cos(theta)],
-                  [np.cos(theta)*np.cos(phi), np.cos(theta)*np.sin(phi), -np.sin(theta)],
-                  [-np.sin(phi), np.cos(phi), np.zeros(len(phi))]]).transpose(2, 0, 1)
-
-    pvals_polar = ( R @ (vsun.value + pvals)[..., np.newaxis]).squeeze()
-    rhat_polar = ( R @ rhat[..., np.newaxis]).squeeze()
-
-    return pvals_polar, rhat_polar
 
 
 def calc_sigma2(pvals, rhat, give_vmean=False, noniso=False):
