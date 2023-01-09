@@ -367,7 +367,7 @@ def max_L(alpha, pvals, rhatvals, vmin, dv, n, phi0_guess=[], v0_guess=[], disp_
     print(colored('Finished!','green',attrs=['bold','underline']))
 
     fmin_it = np.shape(phi_all)[0] - 1
-    fmin_cg_output(fopt, fcalls, gcalls, flag, fmin_it)
+    ut(fopt, fcalls, gcalls, flag, fmin_it)
 
     builtins.n = n
     builtins.dv = dv

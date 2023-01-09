@@ -5,7 +5,7 @@ from astropy.io.ascii import read as tableread
 import builtins
 import inspect
 from termcolor import colored
-from input_manipulation import *
+from input_manipulation import DataReader
 # from Deproject_test import sanity_check
 import matplotlib
 #from memory_profiler import LogFile
@@ -68,12 +68,6 @@ optional.add_argument("-bs",
 
 args = parser.parse_args()
 
-if args.f == 'max_L':
-    from Deproject_v1_0 import max_L as max_func
-elif args.f == 'multigrid_max_L':
-    from Deproject_v1_0 import multigrid_max_L as max_func
-
-
 ti = time.time()
 builtins.ti = ti
 
@@ -87,9 +81,15 @@ if bool(int(args.bs)):
     pvals, rhatvals = dr.bootstrap_sample(pvals, rhatvals)
 
 if dr.use_guess:
-    mxl, fmin_it = max_func(dr.alpha, pvals, rhatvals, dr.vmin, dr.dv, dr.n, v0_guess=dr.v_guess, disp_guess=dr.disp_guess, noniso=dr.non_iso, polar=dr.polar)
+    dep = Deprojection(dr.alpha, pvals, rhatvals, dr.vmin, dr.dv, dr.n, v0_guess=dr.v_guess, disp_guess=dr.disp_guess, noniso=dr.non_iso, polar=dr.polar)
+    mxl, fmin_it =
 elif not dr.use_guess:
-    mxl, fmin_it = max_func(dr.alpha, pvals, rhatvals, vdr.vmin, dr.dv, dr.n, noniso=dr.non_iso, polar=dr.polar)
+    dep = Deprojection(dr.alpha, pvals, rhatvals, dr.vmin, dr.dv, dr.n, noniso=dr.non_iso, polar=dr.polar)
+
+if args.f == 'max_L':
+    mxl, fmin_it = dep.max_L()
+elif args.f == 'multigrid_max_L':
+    mxl, fmin_it = dep.multigrid_max_L()
 
 tf = time.time()
 endtime = (tf - builtins.ti)/60
