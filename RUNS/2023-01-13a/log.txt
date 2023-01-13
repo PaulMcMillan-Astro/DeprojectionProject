@@ -1,0 +1,5 @@
+Datafile    : SN_example.vot
+fmin its    : 764
+Time needed : 0.018565689391560024 hrs
+Labels      : n[1x3], vmin[1x3], dv[1x3], polar, use_guess, noniso, mu_guess[1x3], sigma_guess[1x3], alpha
+Values      : [100 48 48], [-100.0 -100.0 -50.0], [2.0 3.125 2.0833333333333335], 0, 1, 1, [3.0 -10.0 -2.0], [30.0 20.0 15.0], 1e-10
