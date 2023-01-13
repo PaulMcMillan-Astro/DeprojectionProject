@@ -1,6 +1,3 @@
-import os
-import string
-from datetime import date
 import numpy as np
 from astropy.stats import bootstrap
 import astropy.coordinates as coord
@@ -12,43 +9,6 @@ class DataReader:
         self.file_ = filename
         self.b = resample
         self.read_params()
-
-
-    def make_folder(self):
-        '''Function that creates a directory with name YYYY-MM-DDx where x
-        is the first letter that is a non-existing directory
-
-        Returns
-        -------
-        string
-            The name of the output directory
-        '''
-
-        alp = string.ascii_lowercase
-        date_str = str(date.today())
-
-        list_str = []
-        for letter in alp:
-            list_str.append(date_str + letter)
-
-        for letter1 in alp:
-            for letter2 in alp:
-                list_str.append(date_str + letter1 + letter2)
-
-        list_str = np.array(list_str)
-
-
-        os_dirs = os.popen('ls RUNS | grep "%s"' % date_str).read().split("\n")[:-1]
-        os_dirs.sort(key=lambda x: len(x))
-        os_dirs = np.array(os_dirs)
-
-        existing_dirs = np.zeros(len(list_str),dtype='<U12')
-        existing_dirs[:len(os_dirs)] = os_dirs
-
-        folder_name=list_str[list_str != existing_dirs][0]
-        os.system('mkdir RUNS/' + folder_name)
-
-        return folder_name
 
 
     def resample(self, plx_err, pmra_err, pmdec_err, plx_pmra_corr, plx_pmdec_corr, pmra_pmdec_corr):
@@ -154,12 +114,11 @@ class DataReader:
         self.v_guess = np.array(vars_[6].split(',')[:],dtype=float)
         self.disp_guess = np.array(vars_[7].split(',')[:],dtype=float)
         self.alpha = float(vars_[8])
-        datafile = vars_[9]
-        self.logging = bool(int(vars_[10]))
+        self.datafile = vars_[9]
 
         # Read the VOTable
-        if datafile.endswith('.vot'):
-            data_raw = QTable.read('DATA/' + datafile, format='votable')
+        if self.datafile.endswith('.vot'):
+            data_raw = QTable.read('DATA/' + self.datafile, format='votable')
             self.RA = data_raw['ra']
             self.DEC = data_raw['dec']
             self.plx = data_raw['parallax']

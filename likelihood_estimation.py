@@ -85,12 +85,12 @@ class Deprojection:
 
         self.sigma2, vmean = self.calc_sigma2(give_vmean=True)
         if np.size(self.v0_guess) == 0:
-            v0_guess = vmean
+            self.v0_guess = vmean
         if np.size(self.disp_guess) == 0:
             sigma = np.sqrt(sigma2)
-            disp_guess = sigma
+            self.disp_guess = sigma
         if np.size(self.phi0_guess) == 0:
-            phi0 = self.phi_guess(v0_guess, disp_guess)
+            phi0 = self.phi_guess(self.v0_guess, self.disp_guess)
         else:
             phi0 = self.phi0_guess
         if polar:
@@ -108,7 +108,7 @@ class Deprojection:
         fmin_it = 0
         optr = minimize(fun=self.get_neg_L,
                         x0=phi0r,
-                        jac=get_grad_neg_L,
+                        jac=self.get_grad_neg_L,
                         args=(self.dv, self.n),
                         callback=self.callback,
                         method='CG',
@@ -151,19 +151,19 @@ class Deprojection:
         box_steps = self.multigrid_steps()
 
         self.n = box_steps[0]
-        dv = (vmax-self.vmin)/self.n
+        dv = (self.vmax-self.vmin)/self.n
 
         self.sigma2, vmean = self.calc_sigma2(give_vmean=True)
         if np.size(self.v0_guess) == 0:
-            v0_guess = vmean
+            self.v0_guess = vmean
         if np.size(self.disp_guess) == 0:
             sigma = np.sqrt(sigma2)
-            disp_guess = sigma
+            self.disp_guess = sigma
         if np.size(self.phi0_guess) == 0:
-            phi0 = self.phi_guess(v0_guess, disp_guess)
+            phi0 = self.phi_guess(self.v0_guess, self.disp_guess)
         else:
             phi0 = self.phi0_guess
-        if polar:
+        if self.polar:
             self.sigma2 = self.disp_guess**2
 
         builtins.L     = [[] for _ in range(len(box_steps))]
@@ -173,24 +173,24 @@ class Deprojection:
         mxl_dict = {}
         for grid_step, n in enumerate(box_steps):
             builtins.grid_step = grid_step
-            dv = (vmax-self.vmin)/n
+            dv = (self.vmax-self.vmin)/n
 
             print(f'Starting Kvals after {(time.time() - builtins.ti)/60:.2f}mins...')
-            self.Kvals = KvalsSparseMethod(dv, n)
+            self.Kvals = self.KvalsSparseMethod(dv, n)
 
             phi0r = np.ravel(phi0)  # fmin_cg only takes one-dimensional inputs for the initial guess
 
             ### This is where the minimization occurs
             print(f'Started minimization on {(n[0],n[1],n[2])} grid after {(time.time() - builtins.ti)/60:.2f} mins...', end='', flush=True)
-            builtins.L[grid_step].append(-1*get_neg_L(phi0r, dv, n))
-            builtins.gradL[grid_step].append(np.linalg.norm(get_grad_neg_L(phi0r, dv, n)))
+            builtins.L[grid_step].append(-1*self.get_neg_L(phi0r, dv, n))
+            builtins.gradL[grid_step].append(np.linalg.norm(self.get_grad_neg_L(phi0r, dv, n)))
 
-            optr = minimize(fun=get_neg_L,
+            optr = minimize(fun=self.get_neg_L,
                             x0=phi0r,
                             method='CG',
-                            jac=get_grad_neg_L,
+                            jac=self.get_grad_neg_L,
                             args=(dv, n),
-                            callback=callback_mg,
+                            callback=self.callback_mg,
                             options={'gtol': 1e-6, 'disp': False, 'return_all': True})
 
             mxl, fopt, fcalls, gcalls, flag = optr.x, optr.fun, optr.nfev, optr.njev, optr.status
@@ -262,7 +262,7 @@ class Deprojection:
         pmean = self.pvals.mean(axis=-2)
 
         # Fast way for outer product eq (4) of DB98
-        A = np.identity(3) - self.rhat[..., np.newaxis] * self.rhat[..., np.newaxis, :]
+        A = np.identity(3) - self.rhatvals[..., np.newaxis] * self.rhatvals[..., np.newaxis, :]
 
 
         A_mean_inv = np.linalg.inv(A.mean(axis=-3))
@@ -273,7 +273,7 @@ class Deprojection:
         pp = self.pvals - np.einsum('...ikj,...j->...ik', A, v_mean)
 
         pp2mean = np.mean(np.square(pp), axis=-2)
-        if self.noniso:
+        if self.non_iso:
             # In our main method, we rely on built-in tensor algebra functions
             # that perform these computations for us. We set up B by computing the
             # mean of the outer product of the peculiar tangential velocities
@@ -393,11 +393,10 @@ class Deprojection:
         if required_memory > allocated_memory:
             raise MemoryError(f'Required memory for {required_memory:.2f} GB exceeds available memory {allocated_memory:.2f} GB')
 
-        n_stars = len(pvals)
         lil = scisp.lil_matrix((n_stars, np.prod(n)))
 
         for i in range(n_stars):
-            coords, vals = self.calc_sparse_K(self.pvals[i], self.rhat[i], dv, n)
+            coords, vals = self.calc_sparse_K(self.pvals[i], self.rhatvals[i], dv, n)
             lil[i, coords] = vals
 
         return lil.tocsc()
@@ -631,6 +630,7 @@ class Deprojection:
         phi_arr[:,:,1:-1] -= 4 * (phi_arr_loc[:,:,1:-1]) * self.sigma2[2]/(dv[2]*dv[2]) # Adds A_m contribution
 
         return phi_arr
+
 
     def callback(self, x):
         '''

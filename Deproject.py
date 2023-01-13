@@ -1,25 +1,13 @@
+# Script that when called by Python in terminal will perform the computations needed to run a maximisation scheme. It will also allow you to plot the results and the change in L & dL over all iterations.
+
+# If provided the file 'vars.ini' as an argument such that the terminal command is 'python Deproject_exe.py -i vars.ini' it will read the input variables automatically
+
 import time
-from Deproject_v1_0 import *
-import time
-from astropy.io.ascii import read as tableread
 import builtins
-import inspect
 from termcolor import colored
 from input_manipulation import DataReader
-# from Deproject_test import sanity_check
-import matplotlib
-#from memory_profiler import LogFile
-
-matplotlib.use('TkAgg')
-from Deproject_plots import plot_fv, plot_L_and_dL, DM_plt_prefs
-DM_plt_prefs()
-"""Script that when called by Python in terminal will perform the computations needed
-to run a maximisation scheme. It will also allow you to plot the results and the
-change in L & dL over all iterations.
-
-If provided the file 'vars.ini' as an argument such that the terminal command is
-'python Deproject_exe.py -i vars.ini' it will read the input variables automatically"""
-
+from likelihood_estimation import Deprojection
+from log_and_plot import Logger
 import argparse
 
 parser = argparse.ArgumentParser()
@@ -33,14 +21,6 @@ required.add_argument('-i',
                     help='datafile, typically vars.ini',
                     metavar='vars.ini',
                     required=True)
-
-optional.add_argument("-a",
-                    default='0',
-                    const='0',
-                    nargs='?',
-                    choices=['1', '0'],
-                    help='Automatic plotting [default : 0]',
-                    metavar='bool')
 
 optional.add_argument("-f",
                     default='multigrid_max_L',
@@ -71,7 +51,6 @@ args = parser.parse_args()
 ti = time.time()
 builtins.ti = ti
 
-
 dr = DataReader(filename = 'INIT/example.ini', resample=int(args.b))
 pvals, rhatvals = dr.create_sample()
 
@@ -82,7 +61,6 @@ if bool(int(args.bs)):
 
 if dr.use_guess:
     dep = Deprojection(dr.alpha, pvals, rhatvals, dr.vmin, dr.dv, dr.n, v0_guess=dr.v_guess, disp_guess=dr.disp_guess, noniso=dr.non_iso, polar=dr.polar)
-    mxl, fmin_it =
 elif not dr.use_guess:
     dep = Deprojection(dr.alpha, pvals, rhatvals, dr.vmin, dr.dv, dr.n, noniso=dr.non_iso, polar=dr.polar)
 
@@ -98,95 +76,10 @@ print("\nThe run took: ", endtime, 'mins')
 n = builtins.n
 dv = builtins.dv
 
-if logging:
-    # Create a folder for the run and save mxl data
-    folder = make_folder()
-    np.save('RUNS/' + folder + '/mxl_data', mxl)
-
-    # Save output
-    # RUNS folder identifier
-    with open('logs/log_dir_identifier.txt', 'a') as logfile:
-        if folder[10] == 'a' and len(folder) == 11:
-            mark = '='
-            logfile.write('\n' + mark*120 + '\n')
-            logfile.write(mark*55 + folder[:10] + mark*55 + '\n')
-            logfile.write(mark*120 + '\n')
-
-        logfile.write('\nFolder name : ' + folder + '\n')
-        logfile.write('Datafile    : ' + datafile + '\n')
-        logfile.write('fmin its    : ' + str(fmin_it) + '\n')
-        logfile.write('Time needed : ' + str(endtime/60) + ' hrs\n')
-
-    # Logfile in RUNS folder
-    with open('RUNS/' + folder + '/log.txt', 'a') as logfile:
-        logfile.write('Datafile    : ' + datafile + '\n')
-        logfile.write('fmin its    : ' + str(fmin_it) + '\n')
-        logfile.write('Time needed : ' + str(endtime/60) + ' hrs\n')
-        logfile.write('Labels      : Nbins[1x3], vmin[1x3], bin size, use_guess, noniso, mu_guess, sigma_guess, alpha\n')
-        value_string=str((str(list(n)).replace(",",":").replace(":",""),str(list(vmin)).replace(",",":").replace(":","")
-                          ,str(list(dv)).replace(",",":").replace(":",""),use_guess,non_iso,str(list(v_guess)).replace(",",":").replace(":","")
-                          , str(list(disp_guess)).replace(",",":").replace(":",""), alpha)).replace("'","")[1:-1]
-
-        logfile.write("Values      : " + value_string + '\n')
-
-    # MORE IS SAVE BY SANITY_CHECK()
-else:
-    folder = ''
-
-builtins.autoplot = bool(int(args.a))
-if not autoplot:
-    sane = input('Do you want to perform a sanity check [y/n]? ')
-    while sane != 'y' and sane != 'n':
-        sane = input('Incorrect entry, try again [y/n]! ')
-
-    if sane == 'y':
-
-        from Deproject_test import sanity_check
-
-        sanity_check(pvals,rhatvals,list(mxl.values())[-1],vmin,dv,n,logging)
-
-    elif sane == 'n':
-
-        print('Suit yourself')
-
-    shouldiplot = input('Do you want to plot your results [y/n]? ')
-    while shouldiplot != 'y' and shouldiplot != 'n':
-        shouldiplot = input('Incorrect entry, try again [y/n]! ')
-
-    if shouldiplot == 'y':
-        from Deproject_plots import plot_fv,plot_L_and_dL
-
-        plot_fv(list(mxl.values())[-1],input('What plane should I project onto? '),vmin,dv,n,folder,logging)
-
-        s=0
-
-        while True:
-            if s==2:
-                break
-            plotagain = input('Do you want to plot another plane [y/n]? ')
-            if plotagain == 'y':
-                plot_fv(list(mxl.values())[-1],input('What plane should I project onto [xy/yz/xz]? '),vmin,dv,n,folder,logging)
-                s+=1
-                continue
-            else:
-                break
-
-    shouldiplotL = input('Do you want to plot the change in L and dL during the maximisation [y/n]? ')
-    while shouldiplotL != 'y' and shouldiplotL != 'n':
-        shouldiplotL = input('Incorrect entry, try again [y/n]! ')
-
-    if shouldiplotL=='y':
-        plot_L_and_dL(folder,logging)
-
-else:
-    if args.f == 'multigrid_max_L':
-        plot_fv(list(mxl.values())[-1],'xy',vmin,dv,n,folder,logging, polar)
-        plot_fv(list(mxl.values())[-1],'yz',vmin,dv,n,folder,logging, polar)
-        plot_fv(list(mxl.values())[-1],'xz',vmin,dv,n,folder,logging, polar)
-    else:
-        plot_fv(mxl,'xy',vmin,dv,n,folder,logging, polar)
-        plot_fv(mxl,'yz',vmin,dv,n,folder,logging, polar)
-        plot_fv(mxl,'xz',vmin,dv,n,folder,logging, polar)
-    plot_L_and_dL(folder, logging)
+lp = Logger(mxl)
+lp.make_folder()
+lp.log_mle_run(fmin_it, endtime, n, dr.vmin, dv, dr.polar, dr.use_guess, dr.non_iso, dr.v_guess, dr.disp_guess, dr.alpha, dr.datafile)
+lp.plot_and_save()
+lp.plot_L_and_dL()
 
 print('My work here is done')
