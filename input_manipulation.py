@@ -5,8 +5,8 @@ from astropy.table import QTable
 import astropy.units as u
 
 class DataReader:
-    def __init__(self, filename, resample):
-        self.file_ = filename
+    def __init__(self, inifile, resample):
+        self.file_ = inifile
         self.b = resample
         self.read_params()
 
@@ -193,6 +193,6 @@ class DataReader:
                       [-np.sin(phi), np.cos(phi), np.zeros(len(phi))]]).transpose(2, 0, 1)
 
         pvals_polar = ( R @ (vsun.value + pvals)[..., np.newaxis]).squeeze()
-        rhat_polar = ( R @ rhat[..., np.newaxis]).squeeze()
+        rhat_polar = ( R @ rhatvals[..., np.newaxis]).squeeze()
 
         return pvals_polar, rhat_polar

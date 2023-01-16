@@ -51,7 +51,7 @@ args = parser.parse_args()
 ti = time.time()
 builtins.ti = ti
 
-dr = DataReader(filename = 'INIT/example.ini', resample=int(args.b))
+dr = DataReader(inifile=args.i, resample=int(args.b))
 pvals, rhatvals = dr.create_sample()
 
 if dr.polar:
