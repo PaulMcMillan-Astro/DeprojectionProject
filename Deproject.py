@@ -76,9 +76,9 @@ print("\nThe run took: ", endtime, 'mins')
 n = builtins.n
 dv = builtins.dv
 
-lp = Logger(mxl)
+lp = Logger()
 lp.make_folder()
-lp.log_mle_run(fmin_it, endtime, n, dr.vmin, dv, dr.polar, dr.use_guess, dr.non_iso, dr.v_guess, dr.disp_guess, dr.alpha, dr.datafile)
+lp.log_mle_run(mxl, fmin_it, endtime, n, dr.vmin, dv, dr.polar, dr.use_guess, dr.non_iso, dr.v_guess, dr.disp_guess, dr.alpha, dr.datafile)
 lp.plot_and_save()
 lp.plot_L_and_dL()
 

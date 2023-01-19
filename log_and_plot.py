@@ -7,8 +7,7 @@ import matplotlib.pyplot as plt
 import builtins
 
 class Logger:
-    def __init__(self, mxl):
-        self.mxl = mxl
+    def __init__(self):
         plt.style.use('pretty_plots.mplstyle')
 
 
@@ -50,12 +49,15 @@ class Logger:
         return
 
 
-    def log_mle_run(self, fmin_it, endtime, n, vmin, dv, polar, use_guess, non_iso, v_guess, disp_guess, alpha, datafile):
+    def log_mle_run(self, mxl, fmin_it, endtime, n, vmin, dv, polar, use_guess, non_iso, v_guess, disp_guess, alpha, datafile):
         '''
         Function that saves the output maximum likelihood estimate as well as some information about the run.
 
         Parameters
         ----------
+        mxl : Numpy array of shape n
+            The final output array, the log of the probability distribution.
+
         fmin_it : int
             The number of iterations required to run the minimization.
 
@@ -104,6 +106,7 @@ class Logger:
         self.disp_guess = disp_guess
         self.alpha = alpha
         self.datafile = datafile
+        self.mxl = mxl
 
         # Create a folder for the run and save mxl data
         np.save('RUNS/' + self.folder + '/mxl_data', self.mxl)
@@ -142,7 +145,7 @@ class Logger:
         return
 
 
-    def plot_and_save(self, plane='all'):
+    def plot_and_save(self, plane='all', save=True):
         """This function plots the MLE in the specified plane along with contour lines which contain 95%, 90%, 80%, 68%, 50%, 33%, 21%, 12%, 6%, 2% of stars within them, going from outside and inwards.
 
         Parameters
@@ -163,24 +166,12 @@ class Logger:
         elif plane in ['rphi', 'rtheta', 'phitheta'] and not self.polar:
             raise ValueError('Specified plane is spherical but polar=False, this does not compute.')
 
-        dvx, dvy, dvz = self.dv
-        nx, ny, nz = self.n
-        self.vmax = self.vmin + self.n*self.dv
-
-        xbins = np.linspace(self.vmin[0], self.vmax[0], self.n[0]+1)
-        ybins = np.linspace(self.vmin[1], self.vmax[1], self.n[1]+1)
-        zbins = np.linspace(self.vmin[2], self.vmax[2], self.n[2]+1)
-
-        xc = (xbins[1:] + xbins[:-1])/2
-        yc = (ybins[1:] + ybins[:-1])/2
-        zc = (zbins[1:] + zbins[:-1])/2
-
-        self.centers = np.array([xc, yc, zc], dtype=object)
+        self.get_centers()
         self.get_axes_grid()
 
         if not self.polar:
             xlabels = {'UV': '$U$', 'UW': '$U$', 'VW': '$V$'}
-            ylabels = {'UV': '$V', 'UW': '$W$', 'VW': '$W$'}
+            ylabels = {'UV': '$V$', 'UW': '$W$', 'VW': '$W$'}
 
             planes = planes[:3]
         elif self.polar:
@@ -202,7 +193,10 @@ class Logger:
                 ax.set_xlabel(f'{xlabels[plane]} [km s$^{{-1}}$]')
                 ax.set_ylabel(f'{ylabels[plane]} [km s$^{{-1}}$]')
 
-                plt.savefig('RUNS/' + self.folder + '/fvplot_' + plane + '.pdf',format='pdf')
+                if save:
+                    plt.savefig('RUNS/' + self.folder + '/fvplot_' + plane + '.pdf',format='pdf')
+                else:
+                    plt.show()
         else:
             twod_fv = self.get_fv(plane)
             self.plot_fv(twod_fv, plt.gca(), plane)
@@ -212,12 +206,49 @@ class Logger:
             ax.set_xlabel(f'{xlabels[plane]} [km s$^{{-1}}$]')
             ax.set_ylabel(f'{ylabels[plane]} [km s$^{{-1}}$]')
 
+            if save:
+                plt.savefig('RUNS/' + self.folder + '/fvplot_' + plane + '.pdf',format='pdf')
+            else:
+                plt.show()
+
         return
+
+
+    def get_centers(self):
+        '''
+        Calculates the values at the center of each velocity bin, giving the 3D velocity coordinate of each bin in our grid.
+
+        Returns
+        -------
+        centers : Array of three arrays, each with the length on n-1 in that dimension.
+        '''
+        dvx, dvy, dvz = self.dv
+        nx, ny, nz = self.n
+        self.vmax = self.vmin + self.n*self.dv
+
+        xbins = np.linspace(self.vmin[0], self.vmax[0], self.n[0]+1)
+        ybins = np.linspace(self.vmin[1], self.vmax[1], self.n[1]+1)
+        zbins = np.linspace(self.vmin[2], self.vmax[2], self.n[2]+1)
+
+        xc = (xbins[1:] + xbins[:-1])/2
+        yc = (ybins[1:] + ybins[:-1])/2
+        zc = (zbins[1:] + zbins[:-1])/2
+
+        self.centers = np.array([xc, yc, zc], dtype=object)
+        return self.centers
 
 
     def get_axes_grid(self):
         '''
-        Using the calculated centers of all cells from plot_and_save(), this function creates the meshgrids for all combinations of x and y axes that are relevant, depending on whether or not the data is polar.
+        Using the calculated centers of all cells from get_centers(), this function creates the meshgrids for all combinations of x and y axes that are relevant, depending on whether or not the data is polar. This is necessary for the plotting of the 2D grid.
+
+        Returns
+        -------
+        grid_x : dict
+            The meshgrid of the x-axis coordinate for each of the possible combinations of velocities.
+
+        grid_y : dict
+            The meshgrid of the y-axis coordinate for each of the possible combinations of velocities.
         '''
         self.grid_x = {}
         self.grid_y = {}
@@ -229,7 +260,7 @@ class Logger:
             self.grid_x['UV'], self.grid_y['UV'] = np.meshgrid(self.centers[0], self.centers[1], indexing='ij')
             self.grid_x['UW'], self.grid_y['UW'] = np.meshgrid(self.centers[0], self.centers[2], indexing='ij')
             self.grid_x['VW'], self.grid_y['VW'] = np.meshgrid(self.centers[1], self.centers[2], indexing='ij')
-        return
+        return self.grid_x, self.grid_y
 
 
     def get_fv(self, plane):
@@ -358,4 +389,23 @@ class Logger:
         self.alpha = float(lines[8])
         self.vmax = self.vmin + self.n*self.dv
 
+        return
+
+
+    def read_mxl(self, folder):
+        '''
+        Function that reads the MLE numpy pickle to reconstruct the attributes of the class. Useful for when you're running things in a notebook rather than in the algorithm.
+
+        Parameters
+        ----------
+        folder : string
+            The directory in the RUNS folder that contains the mxl.npy file.
+
+        '''
+        mxl = np.load(f'RUNS/{self.folder}/mxl_data.npy', allow_pickle=True).item()
+
+        if isinstance(mxl, dict):
+            self.mxl = mxl[list(mxl.keys())[-1]]
+        else:
+            self.mxl = mxl
         return
